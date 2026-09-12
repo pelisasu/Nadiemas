@@ -164,7 +164,7 @@ SEMUT_COLONY=[
     ("Semut M1 FVG", semut_1_m1_fvg),
     ("Semut M1 Sweep Low", semut_2_m1_sweep),
     ("Semut M5 FVG", semut_3_m5_fvg),
-    ("Semut M5 Sweep High", semut_4_m5_sweep),
+    ("Semut M5 Sweep High", semut_4_m5_sweep_high),
     ("Semut H1 EMA", semut_5_h1_ema),
     ("Semut H4 Trend", semut_6_h4_trend),
     ("Semut DXY Korelasi", semut_7_dxy),
