@@ -1,7 +1,6 @@
 """
-🌾👑 KERAJAAN SEMUT TANI V8.5 - 1 FOTO KOMPLIT SIMPAN MUDAH
-Fitur: Cuma 1 foto + caption lengkap ENTRY SL TP Gudang - gak ada 2 pesan lagi
-Mudah disimpan, mudah dipahami
+🌾👑 KERAJAAN SEMUT TANI V8.5.1 - 1 FOTO KOMPLIT FIX HITUNGAN
+Fix bug: Pemetik 5B 25S -> harusnya 0B 10S
 """
 import os, json, random, time, requests, pandas as pd
 from datetime import datetime
@@ -85,7 +84,7 @@ def get_yf_safe(sym):
     except:
         return pd.DataFrame()
 
-def send_satu_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3, lot, gudang, memory, logs_pemetik, logs_mandor, logs_pembajak, logs_penuai, price, top_str):
+def send_satu_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3, lot, gudang, memory, lap_pemetik, lap_mandor, lap_pembajak, lap_penuai, price, top_str):
     token=os.getenv("TELEGRAM_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat: 
         print(f"{jenis} {keputusan} {buy_pct:.0f}% vs {sell_pct:.0f}% ENTRY {entry:.2f} SL {sl:.2f} TP {tp3:.2f}")
@@ -101,14 +100,13 @@ def send_satu_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3
             emoji="🌿"
             bar="🟨"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
 
-        # CAPTION 1 FOTO KOMPLIT MUDAH DIPAHAMI
         caption=f"""{emoji} {jenis} {keputusan} {pct:.0f}% - {buy_pct:.0f}% vs {sell_pct:.0f}%
 
 📊 COLONY 25 PETANI KOMPAK
-🌿 Pemetik {logs_pemetik.count('B')}B {logs_pemetik.count('S')}S
-👨‍🌾 Mandor {logs_mandor.count('B')}B {logs_mandor.count('S')}S
-🚜 Pembajak {logs_pembajak.count('B')}B {logs_pembajak.count('S')}S
-🌾 Penuai {logs_penuai.count('B')}B {logs_penuai.count('S')}S
+🌿 Pemetik {lap_pemetik['BUY']}B {lap_pemetik['SELL']}S
+👨‍🌾 Mandor {lap_mandor['BUY']}B {lap_mandor['SELL']}S
+🚜 Pembajak {lap_pembajak['BUY']}B {lap_pembajak['SELL']}S
+🌾 Penuai {lap_penuai['BUY']}B {lap_penuai['SELL']}S
 
 💰 OP DI MT5 - HARGA {price:.2f}
 ENTRY: {entry:.2f}
@@ -206,7 +204,7 @@ def logic_penuai(m5, idx, laporan_pembajak):
         return random.choice(["BUY","SELL"])
 
 def ratu_tani_v8():
-    print(f"=== 🌾👑 RATU TANI V8.5 1 FOTO KOMPLIT BANGUN {datetime.now()} ===")
+    print(f"=== 🌾👑 RATU TANI V8.5.1 FIX HITUNGAN BANGUN {datetime.now()} ===")
     dna=load_json(CONFIG["DNA_FILE"], init_dna())
     memory=load_json(CONFIG["MEMORY_FILE"], {"wins":0,"losses":0,"panen_kecil":0,"panen_raya":0,"gudang":0,"evolutions":0})
     last=load_json(CONFIG["LAST_FILE"], {})
@@ -323,9 +321,8 @@ def ratu_tani_v8():
     top3=sorted(dna.items(),key=lambda x: x[1].get("skor",0),reverse=True)[:3]
     top_str=" | ".join([f"{k}:{v.get('skor',0):.0f} Lv{v.get('alat_lv',1)}" for k,v in top3])
 
-    # KIRIM CUMA 1 FOTO KOMPLIT - GAK ADA PESAN TEKS LAGI
-    all_logs=" ".join(logs_pemetik+logs_mandor+logs_pembajak+logs_penuai)
-    send_satu_foto(jenis, keputusan, buy_pct, sell_pct, price, sl, tp1, tp2, tp3, lot, memory['gudang'], memory, all_logs, "".join(logs_mandor), "".join(logs_pembajak), "".join(logs_penuai), price, top_str)
+    # FIX HITUNGAN - pake laporan dict bukan hitung huruf B S
+    send_satu_foto(jenis, keputusan, buy_pct, sell_pct, price, sl, tp1, tp2, tp3, lot, memory['gudang'], memory, laporan_pemetik, laporan_mandor, laporan_pembajak, laporan_penuai, price, top_str)
     
     save_json(CONFIG["LAST_FILE"], {"keputusan":keputusan,"jenis":jenis,"time":time.time(),"price":price})
 
