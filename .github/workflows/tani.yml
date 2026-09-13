@@ -1,7 +1,7 @@
-name: TANI V8.8.2 WEEKEND EVALUASI - AUTO ON SENIN + CACHE
+name: TANI V8.8.2 WEEKEND EVALUASI - AUTO ON SENIN + CACHE FIX
 on:
   schedule:
-    - cron: '0,30 * * * *'  # tiap 30 menit otonom - weekend cuma evaluasi, weekday OP
+    - cron: '0,30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.10'
       
-      - name: Cache DNA Evolusi (biar gudang & Lv gak reset)
+      - name: Cache DNA Evolusi FIX (static key biar gak reset)
         uses: actions/cache@v3
         with:
           path: |
@@ -23,9 +23,10 @@ jobs:
             .memory_tani_v8.json
             .last_tani_v8.json
             .offset_history.json
-          key: tani-v8-dna-${{ github.run_id }}
+          key: tani-v8-dna-stable-v882
           restore-keys: |
             tani-v8-dna-
+            tani-v8-
       
       - name: Install dependencies
         run: |
@@ -42,10 +43,12 @@ jobs:
         if: always()
         run: |
           echo "=== GUDANG TANI ==="
-          cat .memory_tani_v8.json || echo "memory belum ada"
+          cat .memory_tani_v8.json || echo "memory belum ada - init akan dibuat next run"
           echo ""
           echo "=== OFFSET HISTORY WEEKEND ==="
-          cat .offset_history.json | tail -20 || echo "offset belum ada"
+          cat .offset_history.json || echo "offset belum ada"
           echo ""
           echo "=== TOP 3 DNA ==="
-          cat .dna_tani_v8.json | python -m json.tool | head -50 || echo "dna belum ada"
+          cat .dna_tani_v8.json | python -m json.tool 2>&1 | head -80 || echo "dna belum ada - init akan dibuat next run"
+          echo ""
+          ls -lh .*.json || echo "no json files"
