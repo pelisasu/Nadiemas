@@ -1,10 +1,18 @@
 """
-🌾👑 KERAJAAN SEMUT TANI V8.5.1 - 1 FOTO KOMPLIT FIX HITUNGAN
-Fix bug: Pemetik 5B 25S -> harusnya 0B 10S
+🌾👑 KERAJAAN SEMUT TANI V8.7 DINAMIS - TP/SL NGIKUTIN PASAR
+Gak kaku lagi 6$/32$ terus! Sekarang ngikutin volatilitas market!
+
+LOGIC DINAMIS:
+- ATR = Average True Range dari 14 candle terakhir (volatilitas)
+- Kalo market sepi (ATR kecil) => SL/TP kecil biar gak kena SL terus
+- Kalo market rame/news (ATR gede) => SL/TP gede biar gak kesenggol noise
+- Support/Resistance dinamis dari High/Low terakhir
+- RR (Risk Reward) tetap dijaga minimal 1:1.5
 """
 import os, json, random, time, requests, pandas as pd
 from datetime import datetime
 import pytz
+import numpy as np
 
 CONFIG={
     "OFFSET": -2.25,
@@ -84,7 +92,115 @@ def get_yf_safe(sym):
     except:
         return pd.DataFrame()
 
-def send_satu_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3, lot, gudang, memory, lap_pemetik, lap_mandor, lap_pembajak, lap_penuai, price, top_str):
+def hitung_atr_dan_level(m5, keputusan, jenis):
+    """
+    HITUNG TP/SL DINAMIS NGIKUTIN PASAR
+    """
+    try:
+        # Hitung ATR dari 14 candle terakhir
+        df = m5.tail(20).copy()
+        df['H-L'] = df['High'] - df['Low']
+        df['H-Cprev'] = abs(df['High'] - df['Close'].shift(1))
+        df['L-Cprev'] = abs(df['Low'] - df['Close'].shift(1))
+        df['TR'] = df[['H-L','H-Cprev','L-Cprev']].max(axis=1)
+        atr = df['TR'].rolling(14).mean().iloc[-1]
+        
+        # Kalo ATR gak kehitung, pake default 2$
+        if pd.isna(atr) or atr < 0.5:
+            atr = 2.0
+        
+        # Volatilitas market
+        # Sepi: ATR < 1.5$  | Normal: 1.5-3$ | Rame: 3-5$ | News: >5$
+        print(f"📈 ATR (volatilitas) = {atr:.2f}$")
+        
+        # Support Resistance dinamis dari High Low 20 candle
+        recent_high = df['High'].max()
+        recent_low = df['Low'].min()
+        range_market = recent_high - recent_low
+        
+        price = float(m5['Close'].iloc[-1])
+        
+        # DINAMIS LOGIC
+        if jenis == "PANEN KECIL":
+            # KECIL: RR 1:1 - 1:2.5
+            sl_mult = 1.0  # SL = 1x ATR
+            tp1_mult = 0.8
+            tp2_mult = 1.5
+            tp3_mult = 1.5
+            lot = "0.05"
+            add = 15
+        else:
+            # RAYA: RR 1:1.5 - 1:5
+            sl_mult = 1.2
+            tp1_mult = 1.0
+            tp2_mult = 2.0
+            tp3_mult = 4.0
+            lot = "0.10"
+            add = 32
+        
+        # Hitung SL TP dinamis
+        sl_dist = atr * sl_mult
+        tp1_dist = atr * tp1_mult
+        tp2_dist = atr * tp2_mult
+        tp3_dist = atr * tp3_mult
+        
+        # Batas min max biar gak kegedean/kekecilan
+        # SL min 4$ max 10$, TP max 50$
+        sl_dist = max(3.5, min(sl_dist, 10))
+        tp1_dist = max(3, min(tp1_dist, 12))
+        tp2_dist = max(8, min(tp2_dist, 25))
+        tp3_dist = max(12, min(tp3_dist, 50))
+        
+        # Sesuaikan dengan keputusan BUY/SELL
+        if keputusan == "BUY":
+            sl = price - sl_dist
+            tp1 = price + tp1_dist
+            tp2 = price + tp2_dist
+            tp3 = price + tp3_dist
+            # Cek support: SL jangan di bawah recent_low terlalu jauh
+            sl = max(sl, recent_low - 2)  # SL minimal 2$ di bawah low terakhir
+        else:
+            sl = price + sl_dist
+            tp1 = price - tp1_dist
+            tp2 = price - tp2_dist
+            tp3 = price - tp3_dist
+            # Cek resistance: SL jangan di atas recent_high terlalu jauh
+            sl = min(sl, recent_high + 2)  # SL maksimal 2$ di atas high terakhir
+        
+        # Info pasar
+        if atr < 1.5:
+            kondisi = "SEPI 😐 - SL/TP kecil"
+        elif atr < 3:
+            kondisi = "NORMAL 🙂 - SL/TP standar"
+        elif atr < 5:
+            kondisi = "RAME 🔥 - SL/TP lebar"
+        else:
+            kondisi = "NEWS 🌪️ - SL/TP super lebar"
+        
+        print(f"🎯 KONDISI PASAR: {kondisi}")
+        print(f"   ENTRY {price:.2f} | SL {sl:.2f} ({sl_dist:.1f}$) | TP1 {tp1:.2f} ({tp1_dist:.1f}$) TP2 {tp2:.2f} ({tp2_dist:.1f}$) TP3 {tp3:.2f} ({tp3_dist:.1f}$) | Lot {lot}")
+        
+        return price, sl, tp1, tp2, tp3, lot, add, atr, kondisi, sl_dist, tp1_dist, tp2_dist, tp3_dist
+        
+    except Exception as e:
+        print(f"Gagal hitung dinamis: {e}, pake default kaku")
+        # Fallback ke kaku kalo error
+        price = float(m5['Close'].iloc[-1])
+        if jenis=="PANEN KECIL":
+            sl=price-6 if keputusan=="BUY" else price+6
+            tp1=price+5 if keputusan=="BUY" else price-5
+            tp2=price+15 if keputusan=="BUY" else price-15
+            tp3=price+15 if keputusan=="BUY" else price-15
+            lot="0.05"; add=15; atr=2.0; kondisi="DEFAULT"; sl_dist=6; tp1_dist=5; tp2_dist=15; tp3_dist=15
+        else:
+            sl=price-6 if keputusan=="BUY" else price+6
+            tp1=price+5 if keputusan=="BUY" else price-5
+            tp2=price+15 if keputusan=="BUY" else price-15
+            tp3=price+32 if keputusan=="BUY" else price-32
+            lot="0.10"; add=32; atr=2.0; kondisi="DEFAULT"; sl_dist=6; tp1_dist=5; tp2_dist=15; tp3_dist=32
+        return price, sl, tp1, tp2, tp3, lot, add, atr, kondisi, sl_dist, tp1_dist, tp2_dist, tp3_dist
+
+def send_satu_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3, lot, gudang, memory, lap_pemetik, lap_mandor, lap_pembajak, lap_penuai, price, top_str, atr, kondisi, sl_dist, tp1_dist, tp2_dist, tp3_dist):
     token=os.getenv("TELEGRAM_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat: 
         print(f"{jenis} {keputusan} {buy_pct:.0f}% vs {sell_pct:.0f}% ENTRY {entry:.2f} SL {sl:.2f} TP {tp3:.2f}")
@@ -108,13 +224,13 @@ def send_satu_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3
 🚜 Pembajak {lap_pembajak['BUY']}B {lap_pembajak['SELL']}S
 🌾 Penuai {lap_penuai['BUY']}B {lap_penuai['SELL']}S
 
-💰 OP DI MT5 - HARGA {price:.2f}
-ENTRY: {entry:.2f}
-SL: {sl:.2f} (-6$)
-TP1: {tp1:.2f} (+5$)
-TP2: {tp2:.2f} (+15$)
-TP3: {tp3:.2f} (+{32 if jenis=='PANEN RAYA' else 15}$)
-Lot: {lot} | Offset {CONFIG['OFFSET']}
+💰 OP DI MT5 - {kondisi}
+ATR: {atr:.2f}$ | ENTRY {entry:.2f}
+SL: {sl:.2f} (-{sl_dist:.1f}$)
+TP1: {tp1:.2f} (+{tp1_dist:.1f}$)
+TP2: {tp2:.2f} (+{tp2_dist:.1f}$)
+TP3: {tp3:.2f} (+{tp3_dist:.1f}$)
+Lot: {lot} | RR 1:{tp3_dist/sl_dist:.1f}
 
 🏚️ GUDANG TANI
 {bar} {gudang}$
@@ -123,11 +239,11 @@ Target 62$/hari = 434$/minggu
 
 🧬 TOP: {top_str}
 
-✅ Quorum 32%/55% | 3 sinyal/hari
+✅ Dinamis ATR | Quorum 32%/55%
 #TANI #XAUUSD #{keputusan}"""
 
         requests.post(f"https://api.telegram.org/bot{token}/sendPhoto",json={"chat_id":chat,"photo":photo_url,"caption":caption},timeout=15)
-        print(f"Foto terkirim: {jenis} {keputusan} {pct:.0f}%")
+        print(f"Foto terkirim DINAMIS: {jenis} {keputusan} {pct:.0f}% ATR {atr:.2f}$")
     except Exception as e:
         print(f"Gagal kirim foto: {e}")
 
@@ -204,7 +320,7 @@ def logic_penuai(m5, idx, laporan_pembajak):
         return random.choice(["BUY","SELL"])
 
 def ratu_tani_v8():
-    print(f"=== 🌾👑 RATU TANI V8.5.1 FIX HITUNGAN BANGUN {datetime.now()} ===")
+    print(f"=== 🌾👑 RATU TANI V8.7 DINAMIS BANGUN {datetime.now()} ===")
     dna=load_json(CONFIG["DNA_FILE"], init_dna())
     memory=load_json(CONFIG["MEMORY_FILE"], {"wins":0,"losses":0,"panen_kecil":0,"panen_raya":0,"gudang":0,"evolutions":0})
     last=load_json(CONFIG["LAST_FILE"], {})
@@ -299,19 +415,8 @@ def ratu_tani_v8():
         except: pass
     save_json(CONFIG["DNA_FILE"], dna)
 
-    price=float(m5['Close'].iloc[-1])
-    if jenis=="PANEN KECIL":
-        sl=price-6 if keputusan=="BUY" else price+6
-        tp1=price+5 if keputusan=="BUY" else price-5
-        tp2=price+15 if keputusan=="BUY" else price-15
-        tp3=price+15 if keputusan=="BUY" else price-15
-        lot="0.05"; add=15
-    else:
-        sl=price-6 if keputusan=="BUY" else price+6
-        tp1=price+5 if keputusan=="BUY" else price-5
-        tp2=price+15 if keputusan=="BUY" else price-15
-        tp3=price+32 if keputusan=="BUY" else price-32
-        lot="0.10"; add=32
+    # === DINAMIS TP/SL NGIKUTIN PASAR ===
+    price, sl, tp1, tp2, tp3, lot, add, atr, kondisi, sl_dist, tp1_dist, tp2_dist, tp3_dist = hitung_atr_dan_level(m5, keputusan, jenis)
 
     memory["gudang"]+=add
     if jenis=="PANEN KECIL": memory["panen_kecil"]+=1
@@ -321,8 +426,7 @@ def ratu_tani_v8():
     top3=sorted(dna.items(),key=lambda x: x[1].get("skor",0),reverse=True)[:3]
     top_str=" | ".join([f"{k}:{v.get('skor',0):.0f} Lv{v.get('alat_lv',1)}" for k,v in top3])
 
-    # FIX HITUNGAN - pake laporan dict bukan hitung huruf B S
-    send_satu_foto(jenis, keputusan, buy_pct, sell_pct, price, sl, tp1, tp2, tp3, lot, memory['gudang'], memory, laporan_pemetik, laporan_mandor, laporan_pembajak, laporan_penuai, price, top_str)
+    send_satu_foto(jenis, keputusan, buy_pct, sell_pct, price, sl, tp1, tp2, tp3, lot, memory['gudang'], memory, laporan_pemetik, laporan_mandor, laporan_pembajak, laporan_penuai, price, top_str, atr, kondisi, sl_dist, tp1_dist, tp2_dist, tp3_dist)
     
     save_json(CONFIG["LAST_FILE"], {"keputusan":keputusan,"jenis":jenis,"time":time.time(),"price":price})
 
