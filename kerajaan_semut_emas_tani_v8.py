@@ -231,15 +231,24 @@ def ratu_tani_v8():
     if ofi_price is None: ofi=0; ofi_price=price_for_ensemble
     print(f"📊 OFI {ofi:+.2f} PAXG {ofi_price:.2f}")
     if is_off:
-        print(f"🌴 WEEKEND MODE: evaluasi + cek harga")
+        print(f"🌴 WEEKEND MODE: evaluasi + cek harga - HANYA CEK, GAK OP!")
+        # Simpen semua file biar cache gak hilang!
         offset_hist.append({"time": datetime.now(timezone.utc).isoformat(),"paxg": float(ofi_price),"mt5_est": float(price_for_ensemble),"offset": CONFIG["OFFSET"],"ofi": float(ofi),"is_weekend": True})
         if len(offset_hist)>100: offset_hist=offset_hist[-100:]
         save_json(CONFIG["OFFSET_FILE"], offset_hist)
+        save_json(CONFIG["DNA_FILE"], dna)
+        save_json(CONFIG["MEMORY_FILE"], memory)
+        # Pastikan last file ada
+        if not os.path.exists(CONFIG["LAST_FILE"]):
+            save_json(CONFIG["LAST_FILE"], {"keputusan":"WEEKEND","jenis":"EVALUASI","time":time.time(),"price":price_for_ensemble,"conf":0,"trend":"WEEKEND_OFF"})
         last_weekend=last.get("last_weekend_check",0)
         if time.time()-last_weekend>21600:
             send_weekend_check(ofi_price, price_for_ensemble, ofi, memory, dna, offset_hist)
             last["last_weekend_check"]=time.time(); save_json(CONFIG["LAST_FILE"], last)
-        else: print(f"Weekend cooldown { (time.time()-last_weekend)/3600:.1f}j")
+        else: 
+            print(f"Weekend cooldown { (time.time()-last_weekend)/3600:.1f}j - skip Telegram tapi file tetap disimpan")
+            save_json(CONFIG["LAST_FILE"], last)
+        print(f"💾 File disimpan: DNA {len(dna)} petani, Gudang {memory.get('gudang',0)}$, Offset history {len(offset_hist)} entries")
         return
     print(f"Market ON Offset {CONFIG['OFFSET']}")
     lp={"BUY":0,"SELL":0,"NEUTRAL":0}; lm={"BUY":0,"SELL":0,"NEUTRAL":0}; lb={"BUY":0,"SELL":0,"NEUTRAL":0,"BLOCK":0}; ln={"BUY":0,"SELL":0,"NEUTRAL":0}
