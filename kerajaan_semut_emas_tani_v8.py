@@ -1,15 +1,38 @@
 """
-🌾👑 TANI V8.8.2 WEEKEND EVALUASI - OTONOM + AUTO ON SENIN
-- Weekend (Sabtu 04:00 WIB - Senin 05:00 WIB): HANYA evaluasi kinerja + cek harga PAXG vs MT5 freeze
-- Weekday: normal panen BUY/SELL
-- Senin 05:00 WIB (Minggu 22:00 UTC) AUTO ON lagi tanpa perlu manual!
+🌾👑 TANI V8.9 HEADWAY DIRECT AUTO - GITHUB LANGSUNG OP MT5 TANPA APK!
+- User cuma masukin MT5 ID + Password di GitHub Secrets
+- GitHub Actions (windows-latest) yang OP langsung ke Headway MT5
+- Gak perlu on terus, cuma jalan pas sinyal (tiap 30 menit)
+- Sama kayak OP manual, tapi otomatis!
+
+Headway Server: Headway-Real / Headway-Demo / Headway-Real2
+Symbol Headway: GOLD (bukan XAUUSD)
 """
+
 import os, json, random, time, hashlib, requests, pandas as pd
 from collections import deque
 from datetime import datetime, timezone, timedelta
 import numpy as np
 
-CONFIG={"OFFSET": -2.25,"DNA_FILE": ".dna_tani_v8.json","MEMORY_FILE": ".memory_tani_v8.json","LAST_FILE": ".last_tani_v8.json","OFFSET_FILE": ".offset_history.json","PEMETIK": 10,"MANDOR": 5,"PEMBAJAK": 5,"PENUAI": 5,"QUORUM_KECIL": 32,"QUORUM_RAYA": 55,"MAX_SPREAD": 9.0,"MIN_FVG": 0.4,"MAX_SIGNALS_PER_HOUR": 4,"CONF_THRESHOLD": 0.68,"COOLDOWN_KECIL": 900,"COOLDOWN_RAYA": 1800,}
+CONFIG={
+    "OFFSET": -2.25,
+    "DNA_FILE": ".dna_tani_v8.json",
+    "MEMORY_FILE": ".memory_tani_v8.json",
+    "LAST_FILE": ".last_tani_v8.json",
+    "OFFSET_FILE": ".offset_history.json",
+    "TRADE_HISTORY_FILE": ".trade_history_headway.json",
+    "PEMETIK": 10, "MANDOR": 5, "PEMBAJAK": 5, "PENUAI": 5,
+    "QUORUM_KECIL": 32, "QUORUM_RAYA": 55,
+    "MAX_SPREAD": 9.0, "MIN_FVG": 0.4,
+    "MAX_SIGNALS_PER_HOUR": 4, "CONF_THRESHOLD": 0.68,
+    "COOLDOWN_KECIL": 900, "COOLDOWN_RAYA": 1800,
+    "AUTO_TRADE_ENABLED": os.getenv("AUTO_TRADE_ENABLED", "false").lower() == "true",
+    "AUTO_TRADE_MIN_CONF": 70,  # Conf 70% baru auto OP (lu bisa ubah 75/80)
+    "AUTO_TRADE_MIN_COLONY": 50,
+    "AUTO_TRADE_LOT_KECIL": 0.05,
+    "AUTO_TRADE_LOT_RAYA": 0.10,
+}
+
 random.seed(int(time.time())%99999)
 
 def is_weekend_off():
@@ -20,7 +43,7 @@ def is_weekend_off():
     if wd == 4 and h_utc >= 21: return True, f"Weekend OFF - Jumat {h_utc}:00 UTC = Sabtu 04:00 WIB tutup"
     if wd == 5: return True, f"Weekend OFF - Sabtu, pasar XAUUSD tutup"
     if wd == 6 and h_utc < 22: return True, f"Weekend OFF - Minggu {h_utc}:00 UTC, buka Senin 05:00 WIB"
-    return False, f"Market ON - {now_wib.strftime('%A %H:%M')} WIB (wd={wd} h={h_utc})"
+    return False, f"Market ON - {now_wib.strftime('%A %H:%M')} WIB"
 
 def load_json(path, default):
     if os.path.exists(path):
@@ -35,7 +58,7 @@ class AntiBlokirFetcher:
     def __init__(self):
         self.cache = {}; self.cache_time = {}
         self.ua_list = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36","Mozilla/5.0 (iPhone)","Mozilla/5.0 (X11; Linux x86_64)"]
-        self.endpoints_paxg_depth = ["https://api.binance.com/api/v3/depth?symbol=PAXGUSDT&limit=20","https://api1.binance.com/api/v3/depth?symbol=PAXGUSDT&limit=20","https://api2.binance.com/api/v3/depth?symbol=PAXGUSDT&limit=20","https://data-api.binance.vision/api/v3/depth?symbol=PAXGUSDT&limit=20"]
+        self.endpoints_paxg_depth = ["https://api.binance.com/api/v3/depth?symbol=PAXGUSDT&limit=20","https://api1.binance.com/api/v3/depth?symbol=PAXGUSDT&limit=20","https://data-api.binance.vision/api/v3/depth?symbol=PAXGUSDT&limit=20","https://data-api.binance.vision/api/v3/depth?symbol=PAXGUSDT&limit=20"]
         self.endpoints_paxg_klines = ["https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100","https://api1.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100","https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100"]
         self.endpoints_gold = ["https://api.gold-api.com/price/XAU"]
     def _get(self, url, cache_key, ttl=2):
@@ -166,28 +189,133 @@ class AntiSpamV8:
         self.last_sent=now; self.hour_count.append(now); self.sent_hashes.add(h)
         return True,"PASS"
 
-def send_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3, lot, gudang, memory, lp, lm, lb, ln, price, top_str, atr, kondisi, sl_dist, tp1_dist, tp2_dist, tp3_dist, final_prob, trend, ofi, conf, breakdown):
+def send_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3, lot, gudang, memory, lp, lm, lb, ln, price, top_str, atr, kondisi, sl_dist, tp1_dist, tp2_dist, tp3_dist, final_prob, trend, ofi, conf, breakdown, auto_result=None):
     token=os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat: print(f"{jenis} {keputusan} ENTRY {entry:.2f}"); return
     try:
         p1,p2,p3,p4,p5=breakdown; pct=buy_pct if keputusan=="BUY" else sell_pct
         emoji="🌾👑🔥" if jenis=="PANEN RAYA" else "🌿"; bar="🟩"*min(10,memory['gudang']//15)+"⬜"*(10-min(10,memory['gudang']//15))
-        caption=f"{emoji} V8.8.2 {jenis} {keputusan} {pct:.0f}% - {buy_pct:.0f}% vs {sell_pct:.0f}%\n{'BUY 🟢' if keputusan=='BUY' else 'SELL 🔴'} {trend} | Conf {conf*100:.0f}% | Prob {final_prob*100:.0f}% | OFI {ofi:+.2f}\n📊 {lp['BUY']}B {lp['SELL']}S | {lm['BUY']}B {lm['SELL']}S | {lb['BUY']}B {lb['SELL']}S | {ln['BUY']}B {ln['SELL']}S\n🧠 MA {p1*100:.0f}% MACD {p2*100:.0f}% OFI {p3*100:.0f}% TVI {p4*100:.0f}% VOL {p5*100:.0f}%\n💰 {kondisi} ATR {atr:.2f}$ ENTRY {entry:.2f} SL {sl:.2f} TP1 {tp1:.2f} TP2 {tp2:.2f} TP3 {tp3:.2f}\n🏚️ GUDANG {bar} {gudang}$ Evo {memory.get('evolutions',0)}x TOP {top_str}"
+        auto_text=""
+        if auto_result:
+            if auto_result.get("success"):
+                auto_text=f"\n🤖 AUTO OP HEADWAY SUKSES!\n🎫 Ticket {auto_result.get('ticket')} | {auto_result.get('msg')}\n💰 Langsung OP di MT5 lu!"
+            else:
+                auto_text=f"\n⚠️ AUTO OP: {auto_result.get('msg')}"
+        caption=f"{emoji} V8.9 {jenis} {keputusan} {pct:.0f}%\n{'BUY 🟢' if keputusan=='BUY' else 'SELL 🔴'} {trend} Conf {conf*100:.0f}% Prob {final_prob*100:.0f}% OFI {ofi:+.2f}\nENTRY {entry:.2f} SL {sl:.2f} TP1 {tp1:.2f} TP2 {tp2:.2f} TP3 {tp3:.2f} Lot {lot}\nGUDANG {bar} {gudang}$ {auto_text}"
         requests.post(f"https://api.telegram.org/bot{token}/sendPhoto",json={"chat_id":chat,"photo":"https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800","caption":caption},timeout=15)
     except Exception as e: print(f"Gagal foto {e}")
 
 def send_weekend_check(price_paxg, price_mt5_est, ofi, memory, dna, offset_history):
     token=os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat: print(f"Weekend PAXG {price_paxg:.2f} MT5 est {price_mt5_est:.2f}"); return
+    if not token or not chat: return
     try:
-        gudang=memory.get('gudang',0); kecil=memory.get('panen_kecil',0); raya=memory.get('panen_raya',0); evo=memory.get('evolutions',0)
-        top3=sorted(dna.items(),key=lambda x: x[1].get("skor",0),reverse=True)[:3]
-        top_str=" | ".join([f"{k}:{v.get('skor',0):.0f} Lv{v.get('alat_lv',1)}" for k,v in top3]) if top3 else "Belum ada"
-        avg_offset=sum([x['offset'] for x in offset_history[-10:]])/len(offset_history[-10:]) if offset_history else CONFIG["OFFSET"]
-        caption=f"🌴 V8.8.2 WEEKEND EVALUASI + CEK HARGA - PASAR OFF\n\n📊 EVALUASI MINGGU INI:\n🏚️ Gudang: {gudang}$ | Kecil {kecil}x Raya {raya}x | Evo {evo}x\n🧬 TOP: {top_str}\n\n💰 CEK HARGA WEEKEND:\n📊 PAXG Binance: {price_paxg:.2f} USDT\n💰 MT5 Freeze Jumat: {price_mt5_est:.2f}\n📈 OFI: {ofi:+.2f} | Offset: {CONFIG['OFFSET']} (avg {avg_offset:.2f})\n\n🕐 Sabtu 04:00 - Senin 05:00 WIB OFF\n✅ Cek harga weekend buat nyesuain MT5\n⏰ Auto ON Senin 05:00 WIB!\n#WEEKEND"
+        gudang=memory.get('gudang',0); avg_offset=sum([x['offset'] for x in offset_history[-10:]])/len(offset_history[-10:]) if offset_history else CONFIG["OFFSET"]
+        caption=f"🌴 V8.9 WEEKEND HEADWAY\nGudang {gudang}$ PAXG {price_paxg:.2f} MT5 {price_mt5_est:.2f} OFI {ofi:+.2f} Offset {avg_offset:.2f}\nOFF Sabtu 04:00 - Senin 05:00 WIB"
         requests.post(f"https://api.telegram.org/bot{token}/sendPhoto",json={"chat_id":chat,"photo":"https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800","caption":caption},timeout=15)
-        print(f"Weekend evaluasi terkirim")
-    except Exception as e: print(f"Gagal weekend {e}")
+    except: pass
+
+def auto_trade_headway_direct(keputusan, lot, sl, tp1, entry_price, conf, colony_pct, jenis):
+    """GitHub LANGSUNG OP ke Headway MT5 pakai ID+Password - gak perlu on terus!"""
+    result={"success": False, "ticket": None, "msg": "Not attempted"}
+    if not CONFIG["AUTO_TRADE_ENABLED"]:
+        result["msg"]="AUTO_TRADE_ENABLED=false - set true di GitHub Secrets buat auto OP kayak manual"
+        print(f"💡 {result['msg']}")
+        return result
+    if jenis!="PANEN RAYA":
+        result["msg"]=f"Skip auto - hanya PANEN RAYA auto, ini {jenis}"
+        print(f"🤖 {result['msg']}")
+        return result
+    if conf*100 < CONFIG["AUTO_TRADE_MIN_CONF"]:
+        result["msg"]=f"Conf {conf*100:.0f}% < {CONFIG['AUTO_TRADE_MIN_CONF']}%"
+        print(f"🤖 {result['msg']}")
+        return result
+    
+    try:
+        import MetaTrader5 as mt5
+        login=os.getenv("MT5_LOGIN")
+        password=os.getenv("MT5_PASSWORD")
+        server=os.getenv("MT5_SERVER","Headway-Real")
+        symbol=os.getenv("MT5_SYMBOL","GOLD")
+        
+        if not login or not password:
+            result["msg"]="MT5_LOGIN / MT5_PASSWORD belum diisi di Secrets"
+            print(f"❌ {result['msg']}")
+            return result
+        
+        print(f"🤖 HEADWAY DIRECT AUTO: Login {login} ke {server} symbol {symbol} - OP {keputusan} {lot}")
+        
+        # Init MT5
+        if not mt5.initialize(login=int(login), password=password, server=server):
+            result["msg"]=f"MT5 init gagal {server}: {mt5.last_error()} - cek ID/pass/server"
+            print(f"❌ {result['msg']}")
+            mt5.shutdown()
+            return result
+        
+        # Cari symbol Headway
+        for sym in [symbol, "GOLD", "XAUUSD", "GOLD.a", "XAUUSD.a", "XAUUSD.b"]:
+            info=mt5.symbol_info(sym)
+            if info:
+                if not info.visible: mt5.symbol_select(sym, True)
+                symbol=sym
+                print(f"✅ Symbol Headway ketemu: {sym}")
+                break
+        else:
+            result["msg"]="Symbol GOLD/XAUUSD gak ketemu di Headway"
+            mt5.shutdown()
+            return result
+        
+        tick=mt5.symbol_info_tick(symbol)
+        if not tick:
+            result["msg"]=f"Tick {symbol} None"
+            mt5.shutdown()
+            return result
+        
+        price=tick.ask if keputusan=="BUY" else tick.bid
+        
+        req={
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol,
+            "volume": float(lot),
+            "type": mt5.ORDER_TYPE_BUY if keputusan=="BUY" else mt5.ORDER_TYPE_SELL,
+            "price": price,
+            "sl": float(sl),
+            "tp": float(tp1),
+            "deviation": 100,
+            "magic": 8909,
+            "comment": f"TANI V8.9 HEADWAY {keputusan}",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        print(f"📤 OP HEADWAY: {keputusan} {symbol} {lot} @ {price} SL {sl} TP {tp1}")
+        res=mt5.order_send(req)
+        
+        if res is None:
+            result["msg"]=f"order_send None: {mt5.last_error()}"
+        elif res.retcode!=mt5.TRADE_RETCODE_DONE:
+            result["msg"]=f"Gagal retcode {res.retcode}: {res.comment}"
+        else:
+            result["success"]=True
+            result["ticket"]=res.order
+            result["msg"]=f"{keputusan} {lot} {symbol} @ {price} ticket {res.order} - SUKSES AUTO OP!"
+            print(f"✅ {result['msg']}")
+        
+        mt5.shutdown()
+        
+        # Save history
+        hist=load_json(CONFIG["TRADE_HISTORY_FILE"], [])
+        hist.append({"time": datetime.now(timezone.utc).isoformat(), "keputusan": keputusan, "symbol": symbol, "lot": lot, "entry": price, "sl": sl, "tp": tp1, "conf": conf, "colony": colony_pct, "jenis": jenis, "result": result})
+        if len(hist)>100: hist=hist[-100:]
+        save_json(CONFIG["TRADE_HISTORY_FILE"], hist)
+        return result
+        
+    except ImportError:
+        result["msg"]="MetaTrader5 module gak ada - ganti runs-on: windows-latest di tani.yml!"
+        print(f"⚠️ {result['msg']}")
+        return result
+    except Exception as e:
+        result["msg"]=f"Error: {str(e)[:300]}"
+        print(f"❌ {result['msg']}")
+        return result
 
 def init_dna():
     dna={}
@@ -220,8 +348,9 @@ def logic_penuai(m5, idx, lb):
     except: return random.choice(["BUY","SELL"])
 
 def ratu_tani_v8():
-    print(f"=== 🌾👑 RATU TANI V8.8.2 WEEKEND BANGUN {datetime.now()} ===")
+    print(f"=== 🌾👑 TANI V8.9 HEADWAY DIRECT AUTO {datetime.now()} ===")
     is_off, reason = is_weekend_off(); print(f"⏰ {reason}")
+    print(f"🤖 Direct Auto Headway: {CONFIG['AUTO_TRADE_ENABLED']} - Login dari Secrets, OP langsung kayak manual!")
     fetcher=AntiBlokirFetcher(); ensemble=EnsembleV8(); antispam=AntiSpamV8()
     dna=load_json(CONFIG["DNA_FILE"], init_dna()); memory=load_json(CONFIG["MEMORY_FILE"], {"wins":0,"losses":0,"panen_kecil":0,"panen_raya":0,"gudang":0,"evolutions":0}); last=load_json(CONFIG["LAST_FILE"], {}); offset_hist=load_json(CONFIG["OFFSET_FILE"], [])
     m5=get_paxg_safe_hybrid(fetcher,300); h4=get_paxg_safe_hybrid(fetcher,120); dxy=get_yf_safe("DX-Y.NYB")
@@ -231,26 +360,19 @@ def ratu_tani_v8():
     if ofi_price is None: ofi=0; ofi_price=price_for_ensemble
     print(f"📊 OFI {ofi:+.2f} PAXG {ofi_price:.2f}")
     if is_off:
-        print(f"🌴 WEEKEND MODE: evaluasi + cek harga - HANYA CEK, GAK OP!")
-        # Simpen semua file biar cache gak hilang!
+        print(f"🌴 WEEKEND MODE: evaluasi + cek harga - GAK OP")
         offset_hist.append({"time": datetime.now(timezone.utc).isoformat(),"paxg": float(ofi_price),"mt5_est": float(price_for_ensemble),"offset": CONFIG["OFFSET"],"ofi": float(ofi),"is_weekend": True})
         if len(offset_hist)>100: offset_hist=offset_hist[-100:]
-        save_json(CONFIG["OFFSET_FILE"], offset_hist)
-        save_json(CONFIG["DNA_FILE"], dna)
-        save_json(CONFIG["MEMORY_FILE"], memory)
-        # Pastikan last file ada
+        save_json(CONFIG["OFFSET_FILE"], offset_hist); save_json(CONFIG["DNA_FILE"], dna); save_json(CONFIG["MEMORY_FILE"], memory)
         if not os.path.exists(CONFIG["LAST_FILE"]):
             save_json(CONFIG["LAST_FILE"], {"keputusan":"WEEKEND","jenis":"EVALUASI","time":time.time(),"price":price_for_ensemble,"conf":0,"trend":"WEEKEND_OFF"})
         last_weekend=last.get("last_weekend_check",0)
         if time.time()-last_weekend>21600:
             send_weekend_check(ofi_price, price_for_ensemble, ofi, memory, dna, offset_hist)
             last["last_weekend_check"]=time.time(); save_json(CONFIG["LAST_FILE"], last)
-        else: 
-            print(f"Weekend cooldown { (time.time()-last_weekend)/3600:.1f}j - skip Telegram tapi file tetap disimpan")
-            save_json(CONFIG["LAST_FILE"], last)
-        print(f"💾 File disimpan: DNA {len(dna)} petani, Gudang {memory.get('gudang',0)}$, Offset history {len(offset_hist)} entries")
+        else: save_json(CONFIG["LAST_FILE"], last)
+        print(f"💾 DNA {len(dna)} Gudang {memory.get('gudang',0)}$")
         return
-    print(f"Market ON Offset {CONFIG['OFFSET']}")
     lp={"BUY":0,"SELL":0,"NEUTRAL":0}; lm={"BUY":0,"SELL":0,"NEUTRAL":0}; lb={"BUY":0,"SELL":0,"NEUTRAL":0,"BLOCK":0}; ln={"BUY":0,"SELL":0,"NEUTRAL":0}
     for i in range(CONFIG["PEMETIK"]):
         k=f"pemetik_{i}"
@@ -270,8 +392,9 @@ def ratu_tani_v8():
         v=logic_penuai(m5,i,lb); ln[v]+=1
     if lb["BLOCK"]>=3: print(f"🚫 BLOCK"); return
     total=25; tb=lp["BUY"]+lm["BUY"]+lb["BUY"]+ln["BUY"]; ts=lp["SELL"]+lm["SELL"]+lb["SELL"]+ln["SELL"]; buy_pct=tb/total*100; sell_pct=ts/total*100; colony_pct=max(buy_pct,sell_pct)
-    print(f"👑 BUY {tb}/{total}={buy_pct:.0f}% SELL {ts}/{total}={sell_pct:.0f}% Colony {colony_pct:.0f}%")
+    print(f"👑 BUY {tb}/{total}={buy_pct:.0f}% SELL {ts}/{total}={sell_pct:.0f}%")
     final_prob,trend,atr,conf,breakdown=ensemble.final_prob(ofi,colony_pct)
+    print(f"🧠 Prob {final_prob*100:.0f}% {trend} Conf {conf*100:.0f}%")
     keputusan=None; jenis=None
     if buy_pct>=CONFIG["QUORUM_KECIL"] or final_prob>0.58: keputusan="BUY"; jenis="PANEN KECIL"
     if sell_pct>=CONFIG["QUORUM_KECIL"] or final_prob<0.42: keputusan="SELL"; jenis="PANEN KECIL"
@@ -292,14 +415,19 @@ def ratu_tani_v8():
         except: pass
     save_json(CONFIG["DNA_FILE"],dna)
     price=float(m5['Close'].iloc[-1]); sl,tp1,tp2,tp3,sl_dist,tp1_dist,tp2_dist,tp3_dist=get_tp_sl_runner(price,1 if keputusan=="BUY" else -1,trend,atr,m5)
-    lot="0.05" if jenis=="PANEN KECIL" else "0.10"; add=15 if jenis=="PANEN KECIL" else 32
+    lot=CONFIG["AUTO_TRADE_LOT_KECIL"] if jenis=="PANEN KECIL" else CONFIG["AUTO_TRADE_LOT_RAYA"]
     kondisi="SEPI 😐" if atr<1.5 else "NORMAL 🙂" if atr<3 else "RAME 🔥" if atr<5 else "NEWS 🌪️"
-    memory["gudang"]+=add; 
+    memory["gudang"]+=15 if jenis=="PANEN KECIL" else 32
     if jenis=="PANEN KECIL": memory["panen_kecil"]+=1
     else: memory["panen_raya"]+=1
     save_json(CONFIG["MEMORY_FILE"],memory)
     top3=sorted(dna.items(),key=lambda x: x[1].get("skor",0),reverse=True)[:3]; top_str=" | ".join([f"{k}:{v.get('skor',0):.0f} Lv{v.get('alat_lv',1)}" for k,v in top3])
-    send_foto(jenis,keputusan,buy_pct,sell_pct,price,sl,tp1,tp2,tp3,lot,memory['gudang'],memory,lp,lm,lb,ln,price,top_str,atr,kondisi,sl_dist,tp1_dist,tp2_dist,tp3_dist,final_prob,trend,ofi,conf,breakdown)
+    
+    auto_result=None
+    if CONFIG["AUTO_TRADE_ENABLED"]:
+        auto_result=auto_trade_headway_direct(keputusan, lot, sl, tp1, price, conf, colony_pct, jenis)
+    
+    send_foto(jenis,keputusan,buy_pct,sell_pct,price,sl,tp1,tp2,tp3,lot,memory['gudang'],memory,lp,lm,lb,ln,price,top_str,atr,kondisi,sl_dist,tp1_dist,tp2_dist,tp3_dist,final_prob,trend,ofi,conf,breakdown, auto_result)
     save_json(CONFIG["LAST_FILE"],{"keputusan":keputusan,"jenis":jenis,"time":time.time(),"price":price,"conf":conf,"trend":trend})
 
 if __name__=="__main__":
