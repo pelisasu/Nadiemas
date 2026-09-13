@@ -1,3 +1,4 @@
+
 """
 🌾👑 KERAJAAN SEMUT TANI V8.2 CAKEP - TELEGRAM FOTO GUDANG PENUH
 Fix quorum 32%/55% + wajib kerja + notif cakep
