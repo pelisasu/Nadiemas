@@ -1,7 +1,6 @@
-
 """
-🌾👑 KERAJAAN SEMUT TANI V8.2 CAKEP - TELEGRAM FOTO GUDANG PENUH
-Fix quorum 32%/55% + wajib kerja + notif cakep
+🌾👑 KERAJAAN SEMUT TANI V8.3 FIX CAPTION - TELEGRAM GUDANG PENUH BENER
+Fix bug caption SELL 0% -> SELL 100%
 """
 import os, json, random, time, requests, pandas as pd
 from datetime import datetime
@@ -89,13 +88,12 @@ def send_cakep(msg, jenis, keputusan, price, gudang, buy_pct, sell_pct, memory):
     token=os.getenv("TELEGRAM_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat: print(msg); return
     try:
-        # Kirim teks cakep dulu
         requests.post(f"https://api.telegram.org/bot{token}/sendMessage",json={"chat_id":chat,"text":msg,"parse_mode":"Markdown"},timeout=12)
-        # Kalau PANEN RAYA, coba kirim foto gudang penuh via API sendPhoto dengan gambar dari web (placeholder sawah)
-        # Pakai foto sawah emas random biar cakep
         if jenis=="PANEN RAYA":
             photo_url="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800"
-            caption=f"🌾👑 GUDANG PENUH! {keputusan} {buy_pct:.0f}% | Harga {price:.2f} | Gudang {gudang}$ | {memory['panen_raya']}x Raya"
+            # FIX CAPTION BUG: pake sell_pct kalo SELL, buy_pct kalo BUY
+            pct = buy_pct if keputusan=="BUY" else sell_pct
+            caption=f"🌾👑 GUDANG PENUH! {keputusan} {pct:.0f}% | Harga {price:.2f} | Gudang {gudang}$ | {memory['panen_raya']}x Raya"
             try:
                 requests.post(f"https://api.telegram.org/bot{token}/sendPhoto",json={"chat_id":chat,"photo":photo_url,"caption":caption},timeout=12)
             except: pass
@@ -174,7 +172,7 @@ def logic_penuai(m5, idx, laporan_pembajak):
         return random.choice(["BUY","SELL"])
 
 def ratu_tani_v8():
-    print(f"=== 🌾👑 RATU TANI V8.2 CAKEP BANGUN {datetime.now()} ===")
+    print(f"=== 🌾👑 RATU TANI V8.3 FIX CAPTION BANGUN {datetime.now()} ===")
     dna=load_json(CONFIG["DNA_FILE"], init_dna())
     memory=load_json(CONFIG["MEMORY_FILE"], {"wins":0,"losses":0,"panen_kecil":0,"panen_raya":0,"gudang":0,"evolutions":0})
     last=load_json(CONFIG["LAST_FILE"], {})
@@ -291,7 +289,6 @@ def ratu_tani_v8():
     top3=sorted(dna.items(),key=lambda x: x[1].get("skor",0),reverse=True)[:3]
     top_str=" | ".join([f"{k}:{v.get('skor',0):.0f} Lv{v.get('alat_lv',1)}" for k,v in top3])
 
-    # CAKEP NOTIF
     if jenis=="PANEN RAYA":
         emoji_judul="🌾👑🔥 PANEN RAYA"
         gudang_bar="🟩"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
