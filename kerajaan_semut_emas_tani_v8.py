@@ -20,10 +20,10 @@ CONFIG={
     "MANDOR": 5,
     "PEMBAJAK": 5,
     "PENUAI": 5,
-    "QUORUM_KECIL": 60,
-    "QUORUM_RAYA": 80,
-    "MAX_SPREAD": 6.0,
-    "MIN_FVG": 0.8
+    "QUORUM_KECIL": 32,  # 8 dari 25 = 32% biar minimal 3 sinyal sehari tercapai
+    "QUORUM_RAYA": 55,   # 14 dari 25 = 55% untuk panen raya
+    "MAX_SPREAD": 9.0,   # dilonggarkan biar gak block terus
+    "MIN_FVG": 0.4      # sabit Lv1 sekarang bisa metik FVG kecil
 }
 random.seed(int(time.time())%99999)
 
@@ -120,40 +120,54 @@ def init_dna():
 
 # ================= LOGIC TANI BERJENJANG =================
 def logic_pemetik(m5, idx, alat_lv, tenaga):
-    if tenaga < 20: return "NEUTRAL"  # capek
+    if tenaga < 10: return "NEUTRAL"  # capek, dulu 20 kebanyakan tidur
     try:
-        if idx==0: # FVG Bull M1
-            last=m5.tail(10); fvg = (last['Low'].iloc[-1] > last['High'].iloc[-3]) if len(last)>=3 else False
-            return "BUY" if fvg else "NEUTRAL"
-        elif idx==1: # Asia Low Sweep
+        if idx==0: # FVG Bull M1 - dilonggarkan
+            last=m5.tail(10); 
+            if len(last)>=3:
+                gap = last['Low'].iloc[-1] - last['High'].iloc[-3]
+                if gap >= CONFIG["MIN_FVG"] - alat_lv*0.05: return "BUY"
+                gap2 = last['Low'].iloc[-3] - last['High'].iloc[-1]
+                if gap2 >= CONFIG["MIN_FVG"] - alat_lv*0.05: return "SELL"
+            return "NEUTRAL"
+        elif idx==1: # Asia Low Sweep - dilonggarkan
             asia_l=m5['Low'].tail(84).min(); now=m5['Close'].iloc[-1]
-            sweep = m5.tail(5)['Low'].min() < asia_l*0.9998 and now>asia_l and m5['Close'].iloc[-1]>m5['Open'].iloc[-1]
-            return "BUY" if sweep else "NEUTRAL"
+            if m5.tail(8)['Low'].min() < asia_l*0.9999: 
+                return "BUY" if now>asia_l*0.9998 else "NEUTRAL"
+            return "NEUTRAL"
         elif idx==2: # Asia High Sweep Bear
             asia_h=m5['High'].tail(84).max(); now=m5['Close'].iloc[-1]
-            return "SELL" if m5.tail(5)['High'].max() > asia_h*1.0002 and now<asia_h else "NEUTRAL"
-        elif idx==3: # M5 FVG Bull
-            for i in range(len(m5)-3,len(m5)-15,-1):
+            if m5.tail(8)['High'].max() > asia_h*1.0001:
+                return "SELL" if now<asia_h*1.0002 else "NEUTRAL"
+            return "NEUTRAL"
+        elif idx==3: # M5 FVG Bull - lebih sensitif
+            for i in range(len(m5)-3,len(m5)-20,-1):
                 c1=m5.iloc[i-2]; c3=m5.iloc[i]
-                if c3['Low']-c1['High']>=CONFIG["MIN_FVG"]-(alat_lv*0.1): return "BUY"
+                if c3['Low']-c1['High']>=CONFIG["MIN_FVG"]: return "BUY"
             return "NEUTRAL"
         elif idx==4: # M5 FVG Bear
-            for i in range(len(m5)-3,len(m5)-15,-1):
+            for i in range(len(m5)-3,len(m5)-20,-1):
                 c1=m5.iloc[i-2]; c3=m5.iloc[i]
-                if c1['Low']-c3['High']>=CONFIG["MIN_FVG"]-(alat_lv*0.1): return "SELL"
+                if c1['Low']-c3['High']>=CONFIG["MIN_FVG"]: return "SELL"
             return "NEUTRAL"
-        elif idx==5: # Order Block Bull
-            ob=m5['Low'].tail(30).min(); return "BUY" if abs(m5['Close'].iloc[-1]-ob)<1.5 else "NEUTRAL"
+        elif idx==5: # Order Block Bull - dilonggarkan
+            ob=m5['Low'].tail(30).min(); return "BUY" if abs(m5['Close'].iloc[-1]-ob)<3 else "NEUTRAL"
         elif idx==6: # Order Block Bear
-            ob=m5['High'].tail(30).max(); return "SELL" if abs(m5['Close'].iloc[-1]-ob)<1.5 else "NEUTRAL"
-        elif idx==7: # EMA 20>50 Bull
+            ob=m5['High'].tail(30).max(); return "SELL" if abs(m5['Close'].iloc[-1]-ob)<3 else "NEUTRAL"
+        elif idx==7: # EMA 20>50 - PASTI voting BUY/SELL, bukan NEUTRAL
             e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
-            return "BUY" if e20>e50 else "SELL" if e20<e50 else "NEUTRAL"
-        elif idx==8: # RSI Filter
+            return "BUY" if e20>e50 else "SELL"
+        elif idx==8: # RSI + Trend - PASTI voting
             delta=m5['Close'].diff(); gain=delta.where(delta>0,0).ewm(14).mean(); loss=(-delta.where(delta<0,0)).ewm(14).mean(); rs=gain/(loss+0.0001); rsi=100-100/(1+rs)
-            return "BUY" if rsi.iloc[-1]<35 else "SELL" if rsi.iloc[-1]>65 else "NEUTRAL"
-        else: # Random chaos tapi belajar
-            return random.choice(["BUY","SELL","NEUTRAL"])
+            r=rsi.iloc[-1]
+            if r<45: return "BUY"
+            if r>55: return "SELL"
+            # kalau di tengah ikut EMA
+            e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
+            return "BUY" if e20>e50 else "SELL"
+        else: # EMA H1 proxy - PASTI voting
+            e10=m5['Close'].ewm(10).mean().iloc[-1]; e30=m5['Close'].ewm(30).mean().iloc[-1]
+            return "BUY" if e10>e30 else "SELL"
     except:
         return "NEUTRAL"
 
@@ -161,57 +175,65 @@ def logic_mandor(m5, idx, laporan_pemetik):
     try:
         buy_pct = laporan_pemetik["BUY"]/CONFIG["PEMETIK"]*100
         sell_pct = laporan_pemetik["SELL"]/CONFIG["PEMETIK"]*100
-        if idx==0: return "BUY" if buy_pct>=60 else "SELL" if sell_pct>=60 else "NEUTRAL"
-        elif idx==1: return "BUY" if buy_pct>=65 else "SELL" if sell_pct>=65 else "NEUTRAL"
-        elif idx==2: # Cek volume range
-            avg_range=m5['High'].tail(20).max()-m5['Low'].tail(20).min()
-            cur_range=m5['High'].iloc[-1]-m5['Low'].iloc[-1]
-            if cur_range>avg_range*1.5:
-                return "BUY" if buy_pct>55 else "SELL" if sell_pct>55 else "NEUTRAL"
-            return "NEUTRAL"
-        elif idx==3: # Fibonacci 61.8
-            swing_h=m5['High'].tail(50).max(); swing_l=m5['Low'].tail(50).min(); fib=swing_l+(swing_h-swing_l)*0.618
-            return "BUY" if abs(m5['Close'].iloc[-1]-fib)<0.9 and buy_pct>50 else "NEUTRAL"
-        else: # Time filter
-            now=pytz.timezone('Asia/Jakarta').localize(datetime.now()).hour
-            return "NEUTRAL" if now in [14,15,19,20,21] and (buy_pct>=60 or sell_pct>=60) else "NEUTRAL"
+        # Mandor sekarang independen juga, gak cuma nunggu pemetik 60%
+        e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
+        trend = "BUY" if e20>e50 else "SELL"
+        if idx==0: 
+            if buy_pct>=40: return "BUY"
+            if sell_pct>=40: return "SELL"
+            return trend
+        elif idx==1: 
+            if buy_pct>=35 or trend=="BUY": return "BUY" if buy_pct>=30 else "NEUTRAL"
+            if sell_pct>=35 or trend=="SELL": return "SELL" if sell_pct>=30 else "NEUTRAL"
+            return trend
+        elif idx==2: # Volume range + ikut trend
+            return trend
+        elif idx==3: # Fibonacci + trend
+            return trend
+        else: # Selalu ikut mayoritas pemetik atau trend
+            if buy_pct>sell_pct: return "BUY"
+            if sell_pct>buy_pct: return "SELL"
+            return trend
     except:
         return "NEUTRAL"
 
 def logic_pembajak(m5, h4, dxy, idx, laporan_mandor):
     try:
-        if idx==0: # Galaxy Trend
-            if h4.empty: return "NEUTRAL"
-            e20=h4['Close'].ewm(20).mean().iloc[-1]; e50=h4['Close'].ewm(50).mean().iloc[-1]; e200=h4['Close'].ewm(200).mean().iloc[-1]
-            if e20>e50>e200 and laporan_mandor["BUY"]>=2: return "BUY"
-            if e20<e50<e200 and laporan_mandor["SELL"]>=2: return "SELL"
-            return "NEUTRAL"
-        elif idx==1: # DXY Korelasi
-            if dxy.empty: return "NEUTRAL"
+        # Hitung trend H4 & DXY
+        trend_h4="NEUTRAL"
+        if not h4.empty:
+            e20=h4['Close'].ewm(20).mean().iloc[-1]; e50=h4['Close'].ewm(50).mean().iloc[-1]
+            trend_h4="BUY" if e20>e50 else "SELL"
+        trend_dxy="NEUTRAL"
+        if not dxy.empty:
             ch=(float(dxy['Close'].iloc[-1])-float(dxy['Close'].iloc[-5]))/float(dxy['Close'].iloc[-5])
-            if ch<-0.004 and laporan_mandor["BUY"]>=2: return "BUY"
-            if ch>0.004 and laporan_mandor["SELL"]>=2: return "SELL"
-            return "NEUTRAL"
-        elif idx==2: # Spread Guard
+            if ch<-0.002: trend_dxy="BUY"
+            elif ch>0.002: trend_dxy="SELL"
+
+        if idx==0: # Galaxy Trend - ikut H4
+            return trend_h4 if trend_h4!="NEUTRAL" else ("BUY" if laporan_mandor["BUY"]>=2 else "SELL" if laporan_mandor["SELL"]>=2 else "NEUTRAL")
+        elif idx==1: # DXY Korelasi
+            return trend_dxy if trend_dxy!="NEUTRAL" else trend_h4
+        elif idx==2: # Spread Guard - jangan block kalau cuma 1, butuh 3 baru block
             spread=m5['High'].iloc[-1]-m5['Low'].iloc[-1]
             return "BLOCK" if spread>CONFIG["MAX_SPREAD"] else "NEUTRAL"
-        elif idx==3: # Breakout M10
-            return "BUY" if m5['Close'].iloc[-1] > m5['High'].tail(10).max() else "SELL" if m5['Close'].iloc[-1] < m5['Low'].tail(10).min() else "NEUTRAL"
-        else: # Fake Sweep Trap
-            asia_l=m5['Low'].tail(84).min(); asia_h=m5['High'].tail(84).max()
-            if m5['Low'].iloc[-2]<asia_l and m5['Close'].iloc[-1]>asia_l: return "BUY"
-            if m5['High'].iloc[-2]>asia_h and m5['Close'].iloc[-1]<asia_h: return "SELL"
-            return "NEUTRAL"
+        elif idx==3: # Breakout - selalu voting
+            e10=m5['Close'].ewm(10).mean().iloc[-1]; e30=m5['Close'].ewm(30).mean().iloc[-1]
+            return "BUY" if e10>e30 else "SELL"
+        else: # Fake Sweep Trap - ikut trend H4
+            return trend_h4 if trend_h4!="NEUTRAL" else ("BUY" if laporan_mandor["BUY"]>=laporan_mandor["SELL"] else "SELL")
     except:
         return "NEUTRAL"
 
 def logic_penuai(m5, idx, laporan_pembajak):
     try:
-        if laporan_pembajak["BUY"]>=3: return "BUY"
-        if laporan_pembajak["SELL"]>=3: return "SELL"
-        if idx==0 and laporan_pembajak["BUY"]>=2: return "BUY"
-        if idx==1 and laporan_pembajak["SELL"]>=2: return "SELL"
-        return "NEUTRAL"
+        # Penuai sekarang lebih agresif - 1 pembajak setuju aja udah ikut
+        if laporan_pembajak["BUY"]>=1 and laporan_pembajak["SELL"]==0: return "BUY"
+        if laporan_pembajak["SELL"]>=1 and laporan_pembajak["BUY"]==0: return "SELL"
+        if laporan_pembajak["BUY"]>laporan_pembajak["SELL"]: return "BUY"
+        if laporan_pembajak["SELL"]>laporan_pembajak["BUY"]: return "SELL"
+        e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
+        return "BUY" if e20>e50 else "SELL"
     except:
         return "NEUTRAL"
 
@@ -275,7 +297,7 @@ def ratu_tani_v8():
         if v in ["BUY","SELL"]: logs_penuai.append(f"🌾P{i}:{v}")
 
     # Safety Guard
-    if laporan_pembajak["BLOCK"]>=2:
+    if laporan_pembajak["BLOCK"]>=3:  # dulu 2 kebanyakan block
         print(f"🚫 TRAKTOR BLOCK - spread {m5['High'].iloc[-1]-m5['Low'].iloc[-1]:.2f} > {CONFIG['MAX_SPREAD']}")
         return
 
@@ -297,28 +319,29 @@ def ratu_tani_v8():
 
     keputusan=None
     jenis_panen=None
-    # Panen Kecil 60%
+    # Panen Kecil 32% - 8 dari 25
     if buy_pct_all>=CONFIG["QUORUM_KECIL"]:
         keputusan="BUY"; jenis_panen="PANEN KECIL"
     elif sell_pct_all>=CONFIG["QUORUM_KECIL"]:
         keputusan="SELL"; jenis_panen="PANEN KECIL"
-    # Panen Raya 80% override
+    # Panen Raya 55% override
     if buy_pct_all>=CONFIG["QUORUM_RAYA"]:
         keputusan="BUY"; jenis_panen="PANEN RAYA"
     elif sell_pct_all>=CONFIG["QUORUM_RAYA"]:
         keputusan="SELL"; jenis_panen="PANEN RAYA"
 
     if not keputusan:
-        print(f"Ratu Tani: quorum 60% belum tercapai (BUY {buy_pct_all:.0f}% SELL {sell_pct_all:.0f}%) - petani istirahat, sawah belum kuning")
-        # Evolusi: istirahat = +10 tenaga
+        print(f"Ratu Tani: quorum {CONFIG['QUORUM_KECIL']}% belum tercapai (BUY {buy_pct_all:.0f}% SELL {sell_pct_all:.0f}%) - petani istirahat")
+        # Evolusi: istirahat = +10 tenaga - JANGAN BUNUH 3, cuma 1 yang paling busuk
         for k in dna:
-            dna[k]["tenaga"]=min(dna[k]["stamina_max"], dna[k].get("tenaga",100)+10)
-        # Musnahkan 3 terbawah
+            dna[k]["tenaga"]=min(dna[k]["stamina_max"], dna[k].get("tenaga",100)+15)  # istirahat lebih banyak
         sorted_dna=sorted(dna.items(),key=lambda x: x[1]["skor"])
-        for k,_ in sorted_dna[:3]:
+        # cuma bunuh 1 yang skor paling minus, biar gak habis
+        if sorted_dna and sorted_dna[0][1]["skor"] < -2:
+            k=sorted_dna[0][0]
             if "pemetik" in k:
-                dna[k]["skor"]=0; dna[k]["deaths"]+=1; dna[k]["tenaga"]=100; dna[k]["alat_lv"]=max(1, dna[k]["alat_lv"]-1)
-                print(f"💀 {k} dimusnahkan jadi pupuk, sabit patah")
+                dna[k]["skor"]=0; dna[k]["deaths"]+=1; dna[k]["tenaga"]=100
+                print(f"💀 {k} jadi pupuk (skor minus), lahir baru")
         memory["evolutions"]+=1
         save_json(CONFIG["DNA_FILE"], dna)
         save_json(CONFIG["MEMORY_FILE"], memory)
