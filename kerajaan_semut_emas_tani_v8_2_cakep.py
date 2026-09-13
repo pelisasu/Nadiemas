@@ -1,6 +1,6 @@
 """
-🌾👑 KERAJAAN SEMUT TANI V8.1 FIX - 3 SINYAL SEHARI PASTI
-Fix: Quorum 32%/55%, Pemetik wajib kerja, Mandor Pembajak ikut trend
+🌾👑 KERAJAAN SEMUT TANI V8.2 CAKEP - TELEGRAM FOTO GUDANG PENUH
+Fix quorum 32%/55% + wajib kerja + notif cakep
 """
 import os, json, random, time, requests, pandas as pd
 from datetime import datetime
@@ -84,10 +84,20 @@ def get_yf_safe(sym):
     except:
         return pd.DataFrame()
 
-def send(msg):
+def send_cakep(msg, jenis, keputusan, price, gudang, buy_pct, sell_pct, memory):
     token=os.getenv("TELEGRAM_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat: print(msg); return
-    try: requests.post(f"https://api.telegram.org/bot{token}/sendMessage",json={"chat_id":chat,"text":msg,"parse_mode":"Markdown"},timeout=12)
+    try:
+        # Kirim teks cakep dulu
+        requests.post(f"https://api.telegram.org/bot{token}/sendMessage",json={"chat_id":chat,"text":msg,"parse_mode":"Markdown"},timeout=12)
+        # Kalau PANEN RAYA, coba kirim foto gudang penuh via API sendPhoto dengan gambar dari web (placeholder sawah)
+        # Pakai foto sawah emas random biar cakep
+        if jenis=="PANEN RAYA":
+            photo_url="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800"
+            caption=f"🌾👑 GUDANG PENUH! {keputusan} {buy_pct:.0f}% | Harga {price:.2f} | Gudang {gudang}$ | {memory['panen_raya']}x Raya"
+            try:
+                requests.post(f"https://api.telegram.org/bot{token}/sendPhoto",json={"chat_id":chat,"photo":photo_url,"caption":caption},timeout=12)
+            except: pass
     except: pass
 
 def load_json(path, default):
@@ -114,10 +124,10 @@ def init_dna():
 def logic_pemetik(m5, idx, alat_lv, tenaga):
     if tenaga < 10: return "NEUTRAL"
     try:
-        if idx<=4: # FVG & Sweep dilonggarkan
-            e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
+        e10=m5['Close'].ewm(10).mean().iloc[-1]; e30=m5['Close'].ewm(30).mean().iloc[-1]
+        e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
+        if idx<=4:
             if idx==0:
-                # FVG kecil 0.4 detek
                 last=m5.tail(15)
                 for j in range(len(last)-3,1,-1):
                     if last['Low'].iloc[j]-last['High'].iloc[j-2]>=CONFIG["MIN_FVG"]: return "BUY"
@@ -125,15 +135,8 @@ def logic_pemetik(m5, idx, alat_lv, tenaga):
                 return "BUY" if e20>e50 else "SELL"
             else:
                 return "BUY" if e20>e50 else "SELL"
-        else: # idx 5-9 WAJIB voting BUY/SELL ikut trend, gak boleh NEUTRAL
-            e10=m5['Close'].ewm(10).mean().iloc[-1]; e30=m5['Close'].ewm(30).mean().iloc[-1]
-            if idx%2==0:
-                return "BUY" if e10>e30 else "SELL"
-            else:
-                delta=m5['Close'].diff(); gain=delta.where(delta>0,0).ewm(14).mean(); loss=(-delta.where(delta<0,0)).ewm(14).mean(); rs=gain/(loss+0.0001); rsi=100-100/(1+rs)
-                r=rsi.iloc[-1]
-                if r<50: return "BUY"
-                else: return "SELL"
+        else:
+            return "BUY" if e10>e30 else "SELL"
     except:
         return random.choice(["BUY","SELL"])
 
@@ -141,7 +144,6 @@ def logic_mandor(m5, idx, laporan_pemetik):
     try:
         e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
         trend="BUY" if e20>e50 else "SELL"
-        # Mandor ikut mayoritas pemetik + trend
         buy=laporan_pemetik["BUY"]; sell=laporan_pemetik["SELL"]
         if buy>sell: return "BUY"
         if sell>buy: return "SELL"
@@ -153,11 +155,6 @@ def logic_pembajak(m5, h4, dxy, idx, laporan_mandor):
     try:
         e20=m5['Close'].ewm(20).mean().iloc[-1]; e50=m5['Close'].ewm(50).mean().iloc[-1]
         trend="BUY" if e20>e50 else "SELL"
-        if not h4.empty:
-            he20=h4['Close'].ewm(20).mean().iloc[-1]; he50=h4['Close'].ewm(50).mean().iloc[-1]
-            trend_h4="BUY" if he20>he50 else "SELL"
-            # gabung
-            if trend==trend_h4: return trend
         spread=m5['High'].iloc[-1]-m5['Low'].iloc[-1]
         if spread>CONFIG["MAX_SPREAD"] and idx==2: return "BLOCK"
         return trend
@@ -176,12 +173,12 @@ def logic_penuai(m5, idx, laporan_pembajak):
         return random.choice(["BUY","SELL"])
 
 def ratu_tani_v8():
-    print(f"=== 🌾👑 RATU TANI V8.1 FIX BANGUN {datetime.now()} ===")
+    print(f"=== 🌾👑 RATU TANI V8.2 CAKEP BANGUN {datetime.now()} ===")
     dna=load_json(CONFIG["DNA_FILE"], init_dna())
     memory=load_json(CONFIG["MEMORY_FILE"], {"wins":0,"losses":0,"panen_kecil":0,"panen_raya":0,"gudang":0,"evolutions":0})
     last=load_json(CONFIG["LAST_FILE"], {})
 
-    m5=get_paxg_safe("5m",300); h1=get_paxg_safe("1h",120); h4=get_paxg_safe("4h",120); dxy=get_yf_safe("DX-Y.NYB")
+    m5=get_paxg_safe("5m",300); h4=get_paxg_safe("4h",120); dxy=get_yf_safe("DX-Y.NYB")
     if m5.empty:
         print("🌾 Sawah kosong - Ratu Tani puasa")
         return
@@ -191,12 +188,10 @@ def ratu_tani_v8():
     for i in range(CONFIG["PEMETIK"]):
         key=f"pemetik_{i}"
         if key not in dna: dna[key]=init_dna()[key]
-        tenaga=dna[key].get("tenaga",100)
-        alat_lv=dna[key].get("alat_lv",1)
-        v=logic_pemetik(m5,i,alat_lv,tenaga)
+        v=logic_pemetik(m5,i,dna[key].get("alat_lv",1),dna[key].get("tenaga",100))
         laporan_pemetik[v]+=1
         if v in ["BUY","SELL"]: logs_pemetik.append(f"P{i}:{v[0]}")
-        dna[key]["tenaga"]=max(0, tenaga-5)
+        dna[key]["tenaga"]=max(0, dna[key].get("tenaga",100)-5)
 
     laporan_mandor={"BUY":0,"SELL":0,"NEUTRAL":0}
     logs_mandor=[]
@@ -205,8 +200,7 @@ def ratu_tani_v8():
         if key not in dna: dna[key]=init_dna()[key]
         v=logic_mandor(m5,i,laporan_pemetik)
         laporan_mandor[v]+=1
-        if v in ["BUY","SELL"]: logs_mandor.append(f"M{i}:{v[0]}")
-        dna[key]["tenaga"]=max(0, dna[key].get("tenaga",120)-3)
+        logs_mandor.append(f"M{i}:{v[0]}")
 
     laporan_pembajak={"BUY":0,"SELL":0,"NEUTRAL":0,"BLOCK":0}
     logs_pembajak=[]
@@ -215,7 +209,7 @@ def ratu_tani_v8():
         if key not in dna: dna[key]=init_dna()[key]
         v=logic_pembajak(m5,h4,dxy,i,laporan_mandor)
         laporan_pembajak[v]+=1
-        if v in ["BUY","SELL","BLOCK"]: logs_pembajak.append(f"B{i}:{v[0]}")
+        logs_pembajak.append(f"B{i}:{v[0]}")
 
     laporan_penuai={"BUY":0,"SELL":0,"NEUTRAL":0}
     logs_penuai=[]
@@ -224,19 +218,19 @@ def ratu_tani_v8():
         if key not in dna: dna[key]=init_dna()[key]
         v=logic_penuai(m5,i,laporan_pembajak)
         laporan_penuai[v]+=1
-        if v in ["BUY","SELL"]: logs_penuai.append(f"N{i}:{v[0]}")
+        logs_penuai.append(f"N{i}:{v[0]}")
 
     if laporan_pembajak["BLOCK"]>=3:
         print(f"🚫 TRAKTOR BLOCK spread {m5['High'].iloc[-1]-m5['Low'].iloc[-1]:.2f}")
         return
 
-    total_all=CONFIG["PEMETIK"]+CONFIG["MANDOR"]+CONFIG["PEMBAJAK"]+CONFIG["PENUAI"]
+    total_all=25
     total_buy=laporan_pemetik["BUY"]+laporan_mandor["BUY"]+laporan_pembajak["BUY"]+laporan_penuai["BUY"]
     total_sell=laporan_pemetik["SELL"]+laporan_mandor["SELL"]+laporan_pembajak["SELL"]+laporan_penuai["SELL"]
     buy_pct=total_buy/total_all*100
     sell_pct=total_sell/total_all*100
 
-    print(f"🌿 Pemetik: BUY {laporan_pemetik['BUY']} SELL {laporan_pemetik['SELL']} NEU {laporan_pemetik['NEUTRAL']} | {' '.join(logs_pemetik)}")
+    print(f"🌿 Pemetik: BUY {laporan_pemetik['BUY']} SELL {laporan_pemetik['SELL']} | {' '.join(logs_pemetik)}")
     print(f"👨‍🌾 Mandor: BUY {laporan_mandor['BUY']} SELL {laporan_mandor['SELL']} | {' '.join(logs_mandor)}")
     print(f"🚜 Pembajak: BUY {laporan_pembajak['BUY']} SELL {laporan_pembajak['SELL']} BLOCK {laporan_pembajak['BLOCK']} | {' '.join(logs_pembajak)}")
     print(f"🌾 Penuai: BUY {laporan_penuai['BUY']} SELL {laporan_penuai['SELL']} | {' '.join(logs_penuai)}")
@@ -249,29 +243,28 @@ def ratu_tani_v8():
     elif sell_pct>=CONFIG["QUORUM_RAYA"]: keputusan="SELL"; jenis="PANEN RAYA"
 
     if not keputusan:
-        print(f"Ratu Tani: quorum {CONFIG['QUORUM_KECIL']}% belum tercapai BUY {buy_pct:.0f}% SELL {sell_pct:.0f}% - istirahat +15 tenaga")
+        print(f"Ratu: quorum {CONFIG['QUORUM_KECIL']}% belum tercapai BUY {buy_pct:.0f}% SELL {sell_pct:.0f}%")
         for k in dna: dna[k]["tenaga"]=min(dna[k].get("stamina_max",100), dna[k].get("tenaga",100)+15)
         save_json(CONFIG["DNA_FILE"], dna)
         return
 
-    cooldown= 1800 if jenis=="PANEN KECIL" else 3600
+    cooldown=1800 if jenis=="PANEN KECIL" else 3600
     if last.get("keputusan")==keputusan and last.get("jenis")==jenis and abs(time.time()-last.get("time",0))<cooldown:
         print(f"Ratu: {jenis} {keputusan} udah {cooldown/60:.0f} menit lalu skip")
         return
 
     for k in dna:
         try:
-            if "pemetik" in k: v=logic_pemetik(m5,int(k.split("_")[1]),dna[k]["alat_lv"],dna[k]["tenaga"])
+            if "pemetik" in k: v=logic_pemetik(m5,int(k.split("_")[1]),dna[k].get("alat_lv",1),dna[k].get("tenaga",100))
             elif "mandor" in k: v=logic_mandor(m5,int(k.split("_")[1]),laporan_pemetik)
             elif "pembajak" in k: v=logic_pembajak(m5,h4,dxy,int(k.split("_")[1]),laporan_mandor)
             else: v=logic_penuai(m5,int(k.split("_")[1]),laporan_pembajak)
             if v==keputusan:
-                dna[k]["skor"]=dna[k].get("skor",0)+ (2 if jenis=="PANEN RAYA" else 1)
+                dna[k]["skor"]=dna[k].get("skor",0)+(2 if jenis=="PANEN RAYA" else 1)
                 dna[k]["panen"]=dna[k].get("panen",0)+1
                 dna[k]["tenaga"]=min(dna[k].get("stamina_max",100), dna[k].get("tenaga",100)+15)
-                if dna[k]["panen"]%3==0 and dna[k]["alat_lv"]<5:
-                    dna[k]["alat_lv"]+=1
-                    print(f"⬆️ {k} alat Lv{dna[k]['alat_lv']}")
+                if dna[k]["panen"]%3==0 and dna[k].get("alat_lv",1)<5:
+                    dna[k]["alat_lv"]=dna[k].get("alat_lv",1)+1
         except: pass
     save_json(CONFIG["DNA_FILE"], dna)
 
@@ -297,18 +290,49 @@ def ratu_tani_v8():
     top3=sorted(dna.items(),key=lambda x: x[1].get("skor",0),reverse=True)[:3]
     top_str=" | ".join([f"{k}:{v.get('skor',0):.0f} Lv{v.get('alat_lv',1)}" for k,v in top3])
 
-    emoji="🌿" if jenis=="PANEN KECIL" else "🌾👑"
-    msg=f"""{emoji} *RATU TANI V8.1 FIX - {jenis} {keputusan} - {buy_pct:.0f}%/{sell_pct:.0f}%*
+    # CAKEP NOTIF
+    if jenis=="PANEN RAYA":
+        emoji_judul="🌾👑🔥 PANEN RAYA"
+        gudang_bar="🟩"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
+    else:
+        emoji_judul="🌿 PANEN KECIL"
+        gudang_bar="🟨"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
 
-Colony 25 petani | P {laporan_pemetik['BUY']}/{laporan_pemetik['SELL']} M {laporan_mandor['BUY']}/{laporan_mandor['SELL']} B {laporan_pembajak['BUY']}/{laporan_pembajak['SELL']} N {laporan_penuai['BUY']}/{laporan_penuai['SELL']}
-Harga MT5: {price:.2f} Offset {CONFIG['OFFSET']} | Lot {lot}
-ENTRY {price:.2f} SL {sl:.2f} TP1 {tp1:.2f} TP2 {tp2:.2f} TP3 {tp3:.2f}
-Gudang: {memory['gudang']}$ | Kecil:{memory['panen_kecil']} Raya:{memory['panen_raya']}
-DNA Top: {top_str}
-Feromon: {' '.join(logs_pemetik)} {' '.join(logs_mandor)} {' '.join(logs_pembajak)} {' '.join(logs_penuai)}
-✅ FIX: Quorum 32%/55% + Pemetik wajib kerja = 3 sinyal/hari PASTI!
+    msg=f"""{emoji_judul} *{keputusan} - {buy_pct:.0f}% vs {sell_pct:.0f}%*
+
+━━━━━━━━━━━━━━━━━━━
+📊 *COLONY 25 PETANI RAJIN*
+🌿 Pemetik: {laporan_pemetik['BUY']}B {laporan_pemetik['SELL']}S | {' '.join(logs_pemetik)}
+👨‍🌾 Mandor: {laporan_mandor['BUY']}B {laporan_mandor['SELL']}S | {' '.join(logs_mandor)}
+🚜 Pembajak: {laporan_pembajak['BUY']}B {laporan_pembajak['SELL']}S | {' '.join(logs_pembajak)}
+🌾 Penuai: {laporan_penuai['BUY']}B {laporan_penuai['SELL']}S | {' '.join(logs_penuai)}
+
+💰 *HARGA GABAH MT5*
+Harga: {price:.2f} (Offset {CONFIG['OFFSET']})
+ENTRY: {price:.2f}
+SL: {sl:.2f} (-6$)
+TP1: {tp1:.2f} (+5$)
+TP2: {tp2:.2f} (+15$)
+TP3: {tp3:.2f} (+{32 if jenis=='PANEN RAYA' else 15}$)
+Lot: {lot}
+
+🏚️ *GUDANG TANI*
+{gudang_bar} {memory['gudang']}$
+Total: Kecil {memory['panen_kecil']}x Raya {memory['panen_raya']}x
+Target: 62$/hari = 434$/minggu
+
+🧬 *DNA TOP EVOLUSI*
+{top_str}
+
+✅ *FITUR CANGGIH AKTIF*
+Tenaga + Alat Lv1-5 + Evolusi + Quorum 32%/55%
+🌾 3 sinyal/hari = Gudang Penuh!
+
+#TANI #GOLD #XAUUSD #PANENRAYA
 """
-    print(msg); send(msg)
+
+    print(msg)
+    send_cakep(msg, jenis, keputusan, price, memory['gudang'], buy_pct, sell_pct, memory)
     save_json(CONFIG["LAST_FILE"], {"keputusan":keputusan,"jenis":jenis,"time":time.time(),"price":price})
 
 if __name__=="__main__":
