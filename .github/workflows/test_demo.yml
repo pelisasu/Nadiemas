@@ -16,16 +16,18 @@ jobs:
           echo "MT5_LOGIN set: ${{ secrets.MT5_LOGIN != '' }}"
           echo "MT5_PASSWORD set: ${{ secrets.MT5_PASSWORD != '' }}"
           echo "MT5_SERVER set: ${{ secrets.MT5_SERVER != '' }}"
-          if ("${{ secrets.MT5_LOGIN }}" -eq "") { echo "❌ MT5_LOGIN belum di set di Secrets!"; exit 1 }
-          if ("${{ secrets.MT5_PASSWORD }}" -eq "") { echo "❌ MT5_PASSWORD belum di set di Secrets!"; exit 1 }
+          if ("${{ secrets.MT5_LOGIN }}" -eq "") { Write-Error "MT5_LOGIN belum di set!"; exit 1 }
+          if ("${{ secrets.MT5_PASSWORD }}" -eq "") { Write-Error "MT5_PASSWORD belum di set!"; exit 1 }
         shell: powershell
       
       - name: Install MT5 + Test Koneksi Demo 4731137
         run: |
+          $env:PYTHONIOENCODING="utf-8"
           pip install MetaTrader5
           python test_headway_demo.py
         shell: powershell
         env:
+          PYTHONIOENCODING: utf-8
           MT5_LOGIN: ${{ secrets.MT5_LOGIN }}
           MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}
           MT5_SERVER: ${{ secrets.MT5_SERVER }}
