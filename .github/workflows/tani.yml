@@ -1,28 +1,21 @@
-name: TANI V8.9 HEADWAY DIRECT AUTO - GITHUB LANGSUNG OP MT5
+name: TANI V8.8.2 WEEKEND EVALUASI - AUTO ON SENIN + CACHE FIX (TANPA MT5)
 on:
   schedule:
-    - cron: '0,30 * * * *'  # tiap 30 menit - GitHub yang OP langsung ke Headway MT5
+    - cron: '0,30 * * * *'
   workflow_dispatch:
-    inputs:
-      force_trade:
-        description: 'Force OP walaupun bukan PANEN RAYA? (true/false)'
-        required: false
-        default: 'false'
 
 jobs:
-  tani-headway-direct:
-    # PENTING: Harus windows-latest biar bisa OP MT5 Headway langsung!
-    # ubuntu-latest gak bisa OP MT5, cuma bisa sinyal Telegram
-    runs-on: windows-latest
+  tani:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       
-      - name: Setup Python 3.10
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
       
-      - name: Cache DNA + Trade History Headway
+      - name: Cache DNA Evolusi FIX (static key biar gak reset)
         uses: actions/cache@v3
         with:
           path: |
@@ -30,67 +23,33 @@ jobs:
             .memory_tani_v8.json
             .last_tani_v8.json
             .offset_history.json
-            .trade_history_headway.json
-          key: tani-v89-headway-direct-${{ hashFiles('**/kerajaan_semut_emas_tani_v8.py') }}
+          key: tani-v8-dna-stable-v882-final
           restore-keys: |
-            tani-v8-dna-stable-v883-headway
             tani-v8-dna-stable-v882
             tani-v8-dna-
+            tani-v8-
       
-      - name: Install MT5 Headway + Dependencies (Windows)
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install requests pandas yfinance pytz numpy MetaTrader5
-          echo "=== MT5 Headway Python installed ==="
-          # Download MT5 Terminal Headway (optional, MetaTrader5 pip sudah include bridge)
-          # Invoke-WebRequest -Uri "https://download.headway.com.mt/mt5/headway5setup.exe" -OutFile "headway5setup.exe"
-          # Start-Process -FilePath "headway5setup.exe" -ArgumentList "/auto" -Wait
-        shell: powershell
+          pip install requests pandas yfinance pytz numpy
       
-      - name: Run TANI V8.9 HEADWAY DIRECT AUTO OP
+      - name: Run Ratu Tani V8.8.2 WEEKEND EVALUASI (Telegram Only)
         run: python kerajaan_semut_emas_tani_v8.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          # === ISI INI DI GITHUB SECRETS - GITHUB LANGSUNG OP KAYAK MANUAL ===
-          AUTO_TRADE_ENABLED: ${{ secrets.AUTO_TRADE_ENABLED }} # true = GitHub langsung OP ke MT5 lu
-          MT5_LOGIN: ${{ secrets.MT5_LOGIN }}         # ID MT5 Headway lu: contoh 12345678
-          MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}     # Password MT5 Headway lu
-          MT5_SERVER: ${{ secrets.MT5_SERVER }}         # Headway-Real / Headway-Demo / Headway-Real2
-          MT5_SYMBOL: ${{ secrets.MT5_SYMBOL }}         # GOLD (Headway biasanya GOLD, bukan XAUUSD)
-          # Optional: Force trade untuk testing
-          FORCE_TRADE: ${{ github.event.inputs.force_trade }}
       
-      - name: Show Hasil + Trade History Headway
+      - name: Show Gudang & Evaluasi Weekend
         if: always()
         run: |
           echo "=== GUDANG TANI ==="
-          type .memory_tani_v8.json 2>nul || echo "memory belum ada"
+          cat .memory_tani_v8.json || echo "memory belum ada - init akan dibuat next run"
           echo ""
-          echo "=== TRADE HISTORY HEADWAY DIRECT AUTO ==="
-          type .trade_history_headway.json 2>nul || echo "belum ada auto trade - cek AUTO_TRADE_ENABLED=true dan MT5_LOGIN/PASSWORD"
+          echo "=== OFFSET HISTORY WEEKEND ==="
+          cat .offset_history.json || echo "offset belum ada"
           echo ""
-          echo "=== OFFSET ==="
-          type .offset_history.json 2>nul | tail -5 || echo "offset belum ada"
+          echo "=== TOP 3 DNA ==="
+          cat .dna_tani_v8.json | python -m json.tool 2>&1 | head -80 || echo "dna belum ada - init akan dibuat next run"
           echo ""
-          echo "=== TOP DNA ==="
-          python -c "import json; print(json.load(open('.dna_tani_v8.json')))" 2>nul | head -20 || echo "dna belum ada"
-        shell: powershell
-
-  # JOB BACKUP UBUNTU (sinyal Telegram only, tanpa auto OP) - biar tetap jalan kalau Windows error
-  tani-backup-ubuntu:
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - run: pip install requests pandas yfinance pytz numpy
-      - name: Backup Sinyal Only (tanpa OP)
-        run: python kerajaan_semut_emas_tani_v8.py
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          AUTO_TRADE_ENABLED: false
+          ls -lh .*.json || echo "no json files"
