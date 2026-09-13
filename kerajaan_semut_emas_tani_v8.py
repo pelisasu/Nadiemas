@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 import numpy as np
 
 CONFIG={
-    "OFFSET": -2.25,
+    "OFFSET": -2.41,
     "DNA_FILE": ".dna_tani_v8.json",
     "MEMORY_FILE": ".memory_tani_v8.json",
     "LAST_FILE": ".last_tani_v8.json",
