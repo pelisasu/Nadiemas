@@ -1,6 +1,7 @@
 """
-🌾👑 KERAJAAN SEMUT TANI V8.3 FIX CAPTION - TELEGRAM GUDANG PENUH BENER
-Fix bug caption SELL 0% -> SELL 100%
+🌾👑 KERAJAAN SEMUT TANI V8.5 - 1 FOTO KOMPLIT SIMPAN MUDAH
+Fitur: Cuma 1 foto + caption lengkap ENTRY SL TP Gudang - gak ada 2 pesan lagi
+Mudah disimpan, mudah dipahami
 """
 import os, json, random, time, requests, pandas as pd
 from datetime import datetime
@@ -84,20 +85,53 @@ def get_yf_safe(sym):
     except:
         return pd.DataFrame()
 
-def send_cakep(msg, jenis, keputusan, price, gudang, buy_pct, sell_pct, memory):
+def send_satu_foto(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, tp3, lot, gudang, memory, logs_pemetik, logs_mandor, logs_pembajak, logs_penuai, price, top_str):
     token=os.getenv("TELEGRAM_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat: print(msg); return
+    if not token or not chat: 
+        print(f"{jenis} {keputusan} {buy_pct:.0f}% vs {sell_pct:.0f}% ENTRY {entry:.2f} SL {sl:.2f} TP {tp3:.2f}")
+        return
     try:
-        requests.post(f"https://api.telegram.org/bot{token}/sendMessage",json={"chat_id":chat,"text":msg,"parse_mode":"Markdown"},timeout=12)
+        photo_url="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800"
+        pct = buy_pct if keputusan=="BUY" else sell_pct
+        
         if jenis=="PANEN RAYA":
-            photo_url="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800"
-            # FIX CAPTION BUG: pake sell_pct kalo SELL, buy_pct kalo BUY
-            pct = buy_pct if keputusan=="BUY" else sell_pct
-            caption=f"🌾👑 GUDANG PENUH! {keputusan} {pct:.0f}% | Harga {price:.2f} | Gudang {gudang}$ | {memory['panen_raya']}x Raya"
-            try:
-                requests.post(f"https://api.telegram.org/bot{token}/sendPhoto",json={"chat_id":chat,"photo":photo_url,"caption":caption},timeout=12)
-            except: pass
-    except: pass
+            emoji="🌾👑🔥"
+            bar="🟩"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
+        else:
+            emoji="🌿"
+            bar="🟨"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
+
+        # CAPTION 1 FOTO KOMPLIT MUDAH DIPAHAMI
+        caption=f"""{emoji} {jenis} {keputusan} {pct:.0f}% - {buy_pct:.0f}% vs {sell_pct:.0f}%
+
+📊 COLONY 25 PETANI KOMPAK
+🌿 Pemetik {logs_pemetik.count('B')}B {logs_pemetik.count('S')}S
+👨‍🌾 Mandor {logs_mandor.count('B')}B {logs_mandor.count('S')}S
+🚜 Pembajak {logs_pembajak.count('B')}B {logs_pembajak.count('S')}S
+🌾 Penuai {logs_penuai.count('B')}B {logs_penuai.count('S')}S
+
+💰 OP DI MT5 - HARGA {price:.2f}
+ENTRY: {entry:.2f}
+SL: {sl:.2f} (-6$)
+TP1: {tp1:.2f} (+5$)
+TP2: {tp2:.2f} (+15$)
+TP3: {tp3:.2f} (+{32 if jenis=='PANEN RAYA' else 15}$)
+Lot: {lot} | Offset {CONFIG['OFFSET']}
+
+🏚️ GUDANG TANI
+{bar} {gudang}$
+Kecil {memory['panen_kecil']}x Raya {memory['panen_raya']}x
+Target 62$/hari = 434$/minggu
+
+🧬 TOP: {top_str}
+
+✅ Quorum 32%/55% | 3 sinyal/hari
+#TANI #XAUUSD #{keputusan}"""
+
+        requests.post(f"https://api.telegram.org/bot{token}/sendPhoto",json={"chat_id":chat,"photo":photo_url,"caption":caption},timeout=15)
+        print(f"Foto terkirim: {jenis} {keputusan} {pct:.0f}%")
+    except Exception as e:
+        print(f"Gagal kirim foto: {e}")
 
 def load_json(path, default):
     if os.path.exists(path):
@@ -172,7 +206,7 @@ def logic_penuai(m5, idx, laporan_pembajak):
         return random.choice(["BUY","SELL"])
 
 def ratu_tani_v8():
-    print(f"=== 🌾👑 RATU TANI V8.3 FIX CAPTION BANGUN {datetime.now()} ===")
+    print(f"=== 🌾👑 RATU TANI V8.5 1 FOTO KOMPLIT BANGUN {datetime.now()} ===")
     dna=load_json(CONFIG["DNA_FILE"], init_dna())
     memory=load_json(CONFIG["MEMORY_FILE"], {"wins":0,"losses":0,"panen_kecil":0,"panen_raya":0,"gudang":0,"evolutions":0})
     last=load_json(CONFIG["LAST_FILE"], {})
@@ -289,48 +323,10 @@ def ratu_tani_v8():
     top3=sorted(dna.items(),key=lambda x: x[1].get("skor",0),reverse=True)[:3]
     top_str=" | ".join([f"{k}:{v.get('skor',0):.0f} Lv{v.get('alat_lv',1)}" for k,v in top3])
 
-    if jenis=="PANEN RAYA":
-        emoji_judul="🌾👑🔥 PANEN RAYA"
-        gudang_bar="🟩"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
-    else:
-        emoji_judul="🌿 PANEN KECIL"
-        gudang_bar="🟨"*min(10, memory['gudang']//10) + "⬜"*(10-min(10, memory['gudang']//10))
-
-    msg=f"""{emoji_judul} *{keputusan} - {buy_pct:.0f}% vs {sell_pct:.0f}%*
-
-━━━━━━━━━━━━━━━━━━━
-📊 *COLONY 25 PETANI RAJIN*
-🌿 Pemetik: {laporan_pemetik['BUY']}B {laporan_pemetik['SELL']}S | {' '.join(logs_pemetik)}
-👨‍🌾 Mandor: {laporan_mandor['BUY']}B {laporan_mandor['SELL']}S | {' '.join(logs_mandor)}
-🚜 Pembajak: {laporan_pembajak['BUY']}B {laporan_pembajak['SELL']}S | {' '.join(logs_pembajak)}
-🌾 Penuai: {laporan_penuai['BUY']}B {laporan_penuai['SELL']}S | {' '.join(logs_penuai)}
-
-💰 *HARGA GABAH MT5*
-Harga: {price:.2f} (Offset {CONFIG['OFFSET']})
-ENTRY: {price:.2f}
-SL: {sl:.2f} (-6$)
-TP1: {tp1:.2f} (+5$)
-TP2: {tp2:.2f} (+15$)
-TP3: {tp3:.2f} (+{32 if jenis=='PANEN RAYA' else 15}$)
-Lot: {lot}
-
-🏚️ *GUDANG TANI*
-{gudang_bar} {memory['gudang']}$
-Total: Kecil {memory['panen_kecil']}x Raya {memory['panen_raya']}x
-Target: 62$/hari = 434$/minggu
-
-🧬 *DNA TOP EVOLUSI*
-{top_str}
-
-✅ *FITUR CANGGIH AKTIF*
-Tenaga + Alat Lv1-5 + Evolusi + Quorum 32%/55%
-🌾 3 sinyal/hari = Gudang Penuh!
-
-#TANI #GOLD #XAUUSD #PANENRAYA
-"""
-
-    print(msg)
-    send_cakep(msg, jenis, keputusan, price, memory['gudang'], buy_pct, sell_pct, memory)
+    # KIRIM CUMA 1 FOTO KOMPLIT - GAK ADA PESAN TEKS LAGI
+    all_logs=" ".join(logs_pemetik+logs_mandor+logs_pembajak+logs_penuai)
+    send_satu_foto(jenis, keputusan, buy_pct, sell_pct, price, sl, tp1, tp2, tp3, lot, memory['gudang'], memory, all_logs, "".join(logs_mandor), "".join(logs_pembajak), "".join(logs_penuai), price, top_str)
+    
     save_json(CONFIG["LAST_FILE"], {"keputusan":keputusan,"jenis":jenis,"time":time.time(),"price":price})
 
 if __name__=="__main__":
