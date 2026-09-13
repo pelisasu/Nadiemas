@@ -11,16 +11,35 @@ jobs:
         with:
           python-version: '3.10'
       
-      - name: Check Secrets Set
+      - name: Check Secrets
         run: |
-          echo "MT5_LOGIN set: ${{ secrets.MT5_LOGIN != '' }}"
-          echo "MT5_PASSWORD set: ${{ secrets.MT5_PASSWORD != '' }}"
-          echo "MT5_SERVER set: ${{ secrets.MT5_SERVER != '' }}"
-          if ("${{ secrets.MT5_LOGIN }}" -eq "") { Write-Error "MT5_LOGIN belum di set!"; exit 1 }
-          if ("${{ secrets.MT5_PASSWORD }}" -eq "") { Write-Error "MT5_PASSWORD belum di set!"; exit 1 }
+          if ("${{ secrets.MT5_LOGIN }}" -eq "") { Write-Error "MT5_LOGIN belum set!"; exit 1 }
+          if ("${{ secrets.MT5_PASSWORD }}" -eq "") { Write-Error "MT5_PASSWORD belum set!"; exit 1 }
+          Write-Host "[OK] Secrets set: LOGIN=${{ secrets.MT5_LOGIN }} SERVER=${{ secrets.MT5_SERVER }}"
         shell: powershell
       
-      - name: Install MT5 + Test Koneksi Demo 4731137
+      - name: Install MT5 Headway Terminal
+        run: |
+          Write-Host "[INFO] Download MT5 Headway..."
+          $installer = "$env:TEMP\headway5setup.exe"
+          $url1 = "https://download.mql5.com/cdn/web/headway.trade.ltd/mt5/headway5setup.exe"
+          $url2 = "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
+          try {
+            Invoke-WebRequest -Uri $url1 -OutFile $installer -TimeoutSec 90
+            Write-Host "[OK] Downloaded Headway MT5"
+          } catch {
+            Write-Host "[WARN] Coba generic MT5..."
+            Invoke-WebRequest -Uri $url2 -OutFile $installer -TimeoutSec 90
+          }
+          Write-Host "[INFO] Install silent..."
+          Start-Process -FilePath $installer -ArgumentList "/auto" -Wait
+          Start-Sleep -Seconds 20
+          Get-ChildItem "C:\Program Files" -Filter "*MetaTrader*" -Directory | ForEach-Object { Write-Host $_.FullName }
+          if (Test-Path "C:\Program Files\Headway MetaTrader 5\terminal64.exe") { Write-Host "[OK] Found Headway MT5" }
+          if (Test-Path "C:\Program Files\MetaTrader 5\terminal64.exe") { Write-Host "[OK] Found MT5" }
+        shell: powershell
+      
+      - name: Test Koneksi Demo 4731137
         run: |
           $env:PYTHONIOENCODING="utf-8"
           pip install MetaTrader5
@@ -32,3 +51,4 @@ jobs:
           MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}
           MT5_SERVER: ${{ secrets.MT5_SERVER }}
           MT5_SYMBOL: ${{ secrets.MT5_SYMBOL }}
+          MT5_PATH: C:\Program Files\Headway MetaTrader 5\terminal64.exe
