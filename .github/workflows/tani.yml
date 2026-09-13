@@ -1,7 +1,7 @@
-name: TANI V8.8.1 FIX CACHE - OTONOM EVOLUSI ANTI BLOKIR TP 200$ + DNA CACHE
+name: TANI V8.8.2 WEEKEND EVALUASI - AUTO ON SENIN + CACHE
 on:
   schedule:
-    - cron: '0,30 * * * *'  # tiap 30 menit otonom
+    - cron: '0,30 * * * *'  # tiap 30 menit otonom - weekend cuma evaluasi, weekday OP
   workflow_dispatch:
 
 jobs:
@@ -22,6 +22,7 @@ jobs:
             .dna_tani_v8.json
             .memory_tani_v8.json
             .last_tani_v8.json
+            .offset_history.json
           key: tani-v8-dna-${{ github.run_id }}
           restore-keys: |
             tani-v8-dna-
@@ -30,18 +31,21 @@ jobs:
         run: |
           pip install requests pandas yfinance pytz numpy
       
-      - name: Run Ratu Tani V8.8.1 FIX 100% SELL
+      - name: Run Ratu Tani V8.8.2 WEEKEND EVALUASI
         run: python kerajaan_semut_emas_tani_v8.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
       
-      - name: Show Gudang & Evolusi
+      - name: Show Gudang & Evaluasi Weekend
         if: always()
         run: |
           echo "=== GUDANG TANI ==="
           cat .memory_tani_v8.json || echo "memory belum ada"
+          echo ""
+          echo "=== OFFSET HISTORY WEEKEND ==="
+          cat .offset_history.json | tail -20 || echo "offset belum ada"
           echo ""
           echo "=== TOP 3 DNA ==="
           cat .dna_tani_v8.json | python -m json.tool | head -50 || echo "dna belum ada"
