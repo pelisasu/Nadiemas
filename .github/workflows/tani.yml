@@ -1,0 +1,48 @@
+name: TANI V12.3 FINAL
+
+on:
+  schedule:
+    - cron: '3,13,23,33,43,53 0-16 * * 1-5'
+  workflow_dispatch:
+
+concurrency:
+  group: tani-garang
+  cancel-in-progress: true
+
+jobs:
+  tani-garang:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Jitter Anti Blokir
+        run: sleep $((RANDOM % 40))
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install pandas numpy requests yfinance --quiet
+
+      - name: Run TANI
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BALANCE: ${{ secrets.BALANCE || '1000' }}
+        run: python tani.py
+
+      - name: Save State (Anti Reset)
+        run: |
+          git config user.name "Tani Bot"
+          git config user.email "bot@tani.com"
+          git add .*.json 2>/dev/null || true
+          git diff --staged --quiet && echo "No changes skip" && exit 0
+          git commit -m "🔥 Update TANI $(date -u) [skip ci]" || true
+          git push || true
