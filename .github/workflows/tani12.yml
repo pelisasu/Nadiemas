@@ -23,6 +23,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Init files for cache (anti warning)
+        run: |
+          touch .dna_tani_v12.json .memory_tani_v12.json .last_tani_v12.json .offset_history.json || true
+          echo '{}' > .dna_tani_v12.json || true
+          ls -lh .*.json || echo "init"
+
       - name: Cache DNA Evolusi V12 Garang Anti Blokir
         uses: actions/cache@v4
         with:
@@ -33,9 +39,7 @@ jobs:
             .offset_history.json
           key: tani-v12-garang-perfect-${{ hashFiles('kerajaan_semut_emas_tani_v8.py') }}
           restore-keys: |
-            tani-v12-garang-perfect-
-            tani-v12-garang-
-            tani-v8-dna-stable-v882-final
+            [STRIPPED 69 bytes]
 
       - name: Install dependencies anti blokir
         run: |
