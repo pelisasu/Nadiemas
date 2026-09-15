@@ -171,7 +171,9 @@ class AntiBlokirTotalFetcher:
         adaptive = get_adaptive_offset_kalman(offset_hist)
         for url in self.endpoints_paxg_depth:
             data = self._get_anti_blokir(url, f"ofi_{url}", 2, 5)
-            if not data: continue
+            if not data:
+                print(f"⚠️ OFI endpoint gagal {url}")
+                continue
             try:
                 if 'bids' in data and 'asks' in data:
                     bids = data['bids']; asks = data['asks']
@@ -366,7 +368,15 @@ class EnsembleGarang:
         p10=self.engine_10_tvi()
         final=p1*0.20+p2*0.08+p3*0.08+p4*0.07+p5*0.18+p6*0.22+p7*0.07+p8*0.04+p9*0.03+p10*0.03
         conf=max(abs(final-0.5)*2.2, colony_pct/100.0)
-        atr = np.mean([abs(self.prices[i]-self.prices[i-1]) for i in range(-14,0)]) if len(self.prices)>15 else 2.0
+        try:
+            prices_list = list(self.prices)
+            if len(prices_list)>15:
+                diffs = [abs(prices_list[i]-prices_list[i-1]) for i in range(-14,0)]
+                atr = float(np.mean(diffs)) if diffs else 2.0
+            else:
+                atr = 2.0
+        except:
+            atr = 2.0
         return final,trend,atr,conf,(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10)
 
 def get_tp_sl_garang(price, signal, trend, atr, m5):
@@ -510,6 +520,13 @@ def ratu_tani_garang():
     if ofi_price is None: ofi=0; cvd=0; ofi_price=price_for_ensemble
     adaptive = adaptive2
     print(f"📊 OFI {ofi:+.2f} CVD {cvd:+.2f} PAXG {ofi_price:.2f} Kalman {adaptive:.2f}")
+    # Selalu simpan offset history untuk Kalman, bahkan saat skip
+    offset_hist.append({"time": datetime.now(timezone.utc).isoformat(),"paxg": float(ofi_price),"mt5_est": float(price_for_ensemble),"offset": adaptive,"ofi": float(ofi),"cvd": float(cvd),"is_weekend": False})
+    if len(offset_hist)>200: offset_hist=offset_hist[-200:]
+    save_json(CONFIG["OFFSET_FILE"], offset_hist)
+    # Selalu save DNA dan Memory di first run biar cache ada
+    if not os.path.exists(CONFIG["DNA_FILE"]): save_json(CONFIG["DNA_FILE"], dna)
+    if not os.path.exists(CONFIG["MEMORY_FILE"]): save_json(CONFIG["MEMORY_FILE"], memory)
     if is_off:
         offset_hist.append({"time": datetime.now(timezone.utc).isoformat(),"paxg": float(ofi_price),"mt5_est": float(price_for_ensemble),"offset": adaptive,"ofi": float(ofi),"cvd": float(cvd),"is_weekend": True})
         if len(offset_hist)>200: offset_hist=offset_hist[-200:]
@@ -559,12 +576,34 @@ def ratu_tani_garang():
     if sell_pct>=CONFIG["QUORUM_KECIL"] or final_prob<0.38: keputusan="SELL"; jenis="PANEN KECIL GARANG"
     if buy_pct>=CONFIG["QUORUM_RAYA"] or final_prob>0.72: keputusan="BUY"; jenis="PANEN RAYA GARANG"
     if sell_pct>=CONFIG["QUORUM_RAYA"] or final_prob<0.28: keputusan="SELL"; jenis="PANEN RAYA GARANG"
-    if not keputusan: print(f"Quorum belum {buy_pct:.0f}% vs {sell_pct:.0f}%"); return
+    if not keputusan:
+        print(f"Quorum belum {buy_pct:.0f}% vs {sell_pct:.0f}%")
+        save_json(CONFIG["OFFSET_FILE"], offset_hist)
+        save_json(CONFIG["DNA_FILE"], dna)
+        save_json(CONFIG["MEMORY_FILE"], memory)
+        return
     if mtf_dir != "NEUTRAL" and mtf_dir != keputusan:
-        print(f"🚫 MTF {mtf_dir} vs {keputusan} - Anti zonk skip"); return
+        print(f"🚫 MTF {mtf_dir} vs {keputusan} - Anti zonk skip")
+        # Save files biar cache gak warning
+        save_json(CONFIG["OFFSET_FILE"], offset_hist)
+        save_json(CONFIG["DNA_FILE"], dna)
+        save_json(CONFIG["MEMORY_FILE"], memory)
+        save_json(CONFIG["LAST_FILE"], last)
+        return
     allow,reason=antispam.allow(price_for_ensemble,1 if keputusan=="BUY" else -1,conf,trend,final_prob,colony_pct,is_kz,memory.get('loss_streak',0))
-    if not allow: print(f"🚫 SKIP GARANG {reason}"); return
-    if last.get("keputusan")==keputusan and last.get("jenis")==jenis and abs(time.time()-last.get("time",0))<(CONFIG["COOLDOWN_KECIL"] if "KECIL" in jenis else CONFIG["COOLDOWN_RAYA"]): print(f"Cooldown {jenis} {keputusan}"); return
+    if not allow:
+        print(f"🚫 SKIP GARANG {reason}")
+        save_json(CONFIG["OFFSET_FILE"], offset_hist)
+        save_json(CONFIG["DNA_FILE"], dna)
+        save_json(CONFIG["MEMORY_FILE"], memory)
+        return
+    if last.get("keputusan")==keputusan and last.get("jenis")==jenis and abs(time.time()-last.get("time",0))<(CONFIG["COOLDOWN_KECIL"] if "KECIL" in jenis else CONFIG["COOLDOWN_RAYA"]):
+        print(f"Cooldown {jenis} {keputusan} {(time.time()-last.get('time',0))/60:.0f} menit lagi")
+        save_json(CONFIG["OFFSET_FILE"], offset_hist)
+        save_json(CONFIG["DNA_FILE"], dna)
+        save_json(CONFIG["MEMORY_FILE"], memory)
+        save_json(CONFIG["LAST_FILE"], last)
+        return
     for k in dna:
         try:
             if "pemetik" in k: v=logic_pemetik_garang(m5,int(k.split("_")[1]),dna[k].get("alat_lv",1),dna[k].get("tenaga",100))
