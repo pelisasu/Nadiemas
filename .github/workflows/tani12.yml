@@ -1,0 +1,67 @@
+name: TANI V12.0 GARANG SEMPURNA - ANTI ZONK ANTI BLOKIR AKURASI TINGGI 🔥👑
+on:
+  schedule:
+    - cron: '0,30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: tani-v12-garang
+  cancel-in-progress: false
+
+jobs:
+  tani-garang:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cache DNA Evolusi V12 Garang Anti Blokir (static key + hash)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .dna_tani_v12.json
+            .memory_tani_v12.json
+            .last_tani_v12.json
+            .offset_history.json
+          key: tani-v12-garang-perfect-${{ hashFiles('kerajaan_semut_emas_tani_v8.py') }}
+          restore-keys: |
+            tani-v12-garang-perfect-
+            tani-v12-garang-
+            tani-v8-dna-stable-v882-final
+
+      - name: Install dependencies anti blokir
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas yfinance pytz numpy --quiet --no-cache-dir
+
+      - name: Run TANI V12.0 GARANG SEMPURNA - Anti Zonk Anti Blokir
+        run: python kerajaan_semut_emas_tani_v8.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Show Gudang Garang Sempurna
+        if: always()
+        run: |
+          echo "=== GUDANG GARANG V12 SEMPURNA ==="
+          cat .memory_tani_v12.json || echo "init garang - akan dibuat next run"
+          echo ""
+          echo "=== OFFSET KALMAN ADAPTIVE ==="
+          cat .offset_history.json | tail -30 || echo "no offset yet"
+          echo ""
+          echo "=== TOP 3 DNA GARANG ==="
+          cat .dna_tani_v12.json | python -m json.tool 2>&1 | head -150 || echo "init dna"
+          echo ""
+          echo "=== ANTI BLOKIR STATS ==="
+          ls -lh .*.json || echo "no json"
+          echo ""
+          echo "✅ V12.0 GARANG SEMPURNA - Anti Zonk Anti Blokir Akurasi Tinggi!"
