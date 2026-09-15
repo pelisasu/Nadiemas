@@ -409,13 +409,37 @@ def send_foto_garang(jenis, keputusan, buy_pct, sell_pct, entry, sl, tp1, tp2, t
         emoji="🔥👑💰🔥🔥🔥" if "RAYA" in jenis else "🔥👑"
         bar="🟩"*min(10,gudang//30)+"⬜"*(10-min(10,gudang//30))
         wr=memory.get('win_rate',75); ls=memory.get('loss_streak',0)
-        caption=f"""{emoji} V12.0 GARANG {jenis} {keputusan} {pct:.0f}%
+        # ENTRY/SL/TP beda ciri biar gak susah baca!
+        if keputusan == "BUY":
+            entry_icon = "🎯📍 ENTRY BUY"
+            sl_icon = "🛑❌ SL SELL"
+            tp1_icon = "💰✅ TP1"
+            tp2_icon = "💰💰✅ TP2"
+            tp3_icon = "💎👑🚀 TP3 RAYA"
+            arah = "🟢🔼 LONG"
+        else:
+            entry_icon = "🎯📍 ENTRY SELL"
+            sl_icon = "🛑❌ SL BUY"
+            tp1_icon = "💰✅ TP1"
+            tp2_icon = "💰💰✅ TP2"
+            tp3_icon = "💎👑🚀 TP3 RAYA"
+            arah = "🔴🔽 SHORT"
+        
+        caption=f"""{emoji} V12.0 GARANG {jenis} {keputusan} {pct:.0f}% {arah}
+
 {'BUY 🟢🔥' if keputusan=='BUY' else 'SELL 🔴🔥'} {trend} | Conf {conf*100:.0f}% Prob {final_prob*100:.0f}% OFI {ofi:+.2f} CVD {cvd:+.2f}
 🔥 Koloni: P {lp['BUY']}B {lp['SELL']}S | M {lm['BUY']}B {lm['SELL']}S | B {lb['BUY']}B {lb['SELL']}S | P {ln['BUY']}B {ln['SELL']}S | Mafia {le['BUY']}B {le['SELL']}S
 🧠 10E: MA{p1*100:.0f}% EMA{p2*100:.0f}% MACD{p3*100:.0f}% RSI{p4*100:.0f}% OFI{p5*100:.0f}% SMC{p6*100:.0f}% DXY{p7*100:.0f}% U10Y{p8*100:.0f}% VIX{p9*100:.0f}% TVI{p10*100:.0f}%
 ⏰ {killzone_txt} | {mtf_txt}
 💰 {kondisi} ATR {atr:.2f}$ RR 1:{tp3_dist/sl_dist:.1f} Kalman {adaptive:.2f}
-ENTRY {entry:.2f} SL {sl:.2f} TP1 {tp1:.2f} TP2 {tp2:.2f} TP3 {tp3:.2f} Lot {lot}
+
+━━━ 🔥 LEVEL TRADING 🔥 ━━━
+{entry_icon}: {entry:.2f} 💵 Lot {lot}
+{sl_icon}: {sl:.2f} (-{sl_dist:.1f}$) ⚠️
+{tp1_icon}: {tp1:.2f} (+{tp1_dist:.1f}$) 🎯
+{tp2_icon}: {tp2:.2f} (+{tp2_dist:.1f}$) 🎯🎯
+{tp3_icon}: {tp3:.2f} (+{tp3_dist:.1f}$) 🎯🎯🎯
+
 🏚️ GUDANG GARANG {bar} {gudang}$ WR {wr:.0f}% LS {ls}x Evo {memory.get('evolutions',0)}x
 🧬 TOP {top_str}
 🔥 GARANG AKURAT ANTI ZONK ANTI BLOKIR!
