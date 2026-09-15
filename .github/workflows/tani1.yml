@@ -1,0 +1,96 @@
+name: TANI V12.3 GARANG - Anti Blokir GitHub+Binance
+
+on:
+  schedule:
+    # JANGAN */5 bro, GitHub benci itu. Pakai random jam 3,8,13,18... biar ga tabrakan
+    - cron: '3,13,23,33,43,53 0-16 * * 1-5'
+  workflow_dispatch:
+
+# ANTI BLOKIR GITHUB #1: Cegah run dobel numpuk
+concurrency:
+  group: tani-garang
+  cancel-in-progress: true
+
+jobs:
+  tani-garang:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2 # ANTI BLOKIR #2: Jangan biarin nyangkut 10 menit
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Random Jitter (Anti Blokir GitHub #3)
+        run: |
+          DELAY=$((RANDOM % 45))
+          echo "Jitter $DELAY detik biar ga bareng bot lain..."
+          sleep $DELAY
+
+      - name: Check if market open (Anti Blokir #4 - jangan run weekend)
+        id: market
+        run: |
+          DOW=$(date -u +%u)
+          HOUR=$(date -u +%H)
+          if [ "$DOW" -gt 5 ]; then
+            echo "Weekend, skip"
+            echo "open=false" >> $GITHUB_OUTPUT
+          elif [ "$DOW" -eq 5 ] && [ "$HOUR" -ge 21 ]; then
+            echo "Jumat tutup, skip"
+            echo "open=false" >> $GITHUB_OUTPUT
+          else
+            echo "open=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Python
+        if: steps.market.outputs.open == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip' # ANTI BLOKIR #5: Cache pip biar ga download terus
+
+      - name: Install deps (pakai cache)
+        if: steps.market.outputs.open == 'true'
+        run: |
+          pip install pandas numpy requests yfinance --quiet
+
+      - name: Run TANI with 5 Data Source (Anti Blokir Binance)
+        if: steps.market.outputs.open == 'true'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BALANCE: ${{ secrets.BALANCE || '1000' }}
+        run: |
+          python tani_github_v123_anti_blokir.py
+
+      - name: Commit dengan aman (Anti Blokir GitHub #6 - paling penting!)
+        if: steps.market.outputs.open == 'true'
+        run: |
+          git config --global user.name "Ratu Tani Bot"
+          git config --global user.email "bot@tani.garang"
+          git add .dna_tani_v12.json .memory_tani_v12.json .last_tani_v12.json .offset_history.json .position_tani.json .cache_binance.json || true
+          
+          # CEK: Kalo ga ada perubahan, JANGAN commit & push! Ini yang bikin GitHub ban
+          if git diff --staged --quiet; then
+            echo "No changes, skip push - ini anti blokir GitHub!"
+            exit 0
+          fi
+          
+          # CEK: Jangan push kalo commit terakhir masih bot (cegah loop)
+          LAST_MSG=$(git log -1 --pretty=%B || echo "")
+          if echo "$LAST_MSG" | grep -q "Update TANI"; then
+            # Cek jam, kalo belum 15 menit dari commit terakhir, skip
+            LAST_TIME=$(git log -1 --format=%ct || echo 0)
+            NOW=$(date +%s)
+            DIFF=$((NOW - LAST_TIME))
+            if [ $DIFF -lt 600 ]; then
+              echo "Last bot commit $DIFF detik lalu, skip biar ga spam GitHub"
+              exit 0
+            fi
+          fi
+
+          git commit -m "🔥 Update TANI $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]"
+          git push || echo "Push failed, maybe no changes"
