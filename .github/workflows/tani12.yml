@@ -22,9 +22,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
-      - name: Cache DNA Evolusi V12 Garang Anti Blokir (static key + hash)
+      - name: Cache DNA Evolusi V12 Garang Anti Blokir
         uses: actions/cache@v4
         with:
           path: |
@@ -43,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas yfinance pytz numpy --quiet --no-cache-dir
 
-      - name: Run TANI V12.0 GARANG SEMPURNA - Anti Zonk Anti Blokir
+      - name: Run TANI V12.0 GARANG SEMPURNA
         run: python kerajaan_semut_emas_tani_v8.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -53,15 +52,11 @@ jobs:
         if: always()
         run: |
           echo "=== GUDANG GARANG V12 SEMPURNA ==="
-          cat .memory_tani_v12.json || echo "init garang - akan dibuat next run"
+          cat .memory_tani_v12.json || echo "init garang"
           echo ""
-          echo "=== OFFSET KALMAN ADAPTIVE ==="
+          echo "=== OFFSET KALMAN ==="
           cat .offset_history.json | tail -30 || echo "no offset yet"
           echo ""
-          echo "=== TOP 3 DNA GARANG ==="
-          cat .dna_tani_v12.json | python -m json.tool 2>&1 | head -150 || echo "init dna"
-          echo ""
-          echo "=== ANTI BLOKIR STATS ==="
+          echo "=== TOP DNA ==="
+          cat .dna_tani_v12.json | python -m json.tool 2>&1 | head -100 || echo "init"
           ls -lh .*.json || echo "no json"
-          echo ""
-          echo "✅ V12.0 GARANG SEMPURNA - Anti Zonk Anti Blokir Akurasi Tinggi!"
