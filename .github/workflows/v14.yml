@@ -37,8 +37,7 @@ jobs:
             .last_tani_v12.json
             .offset_history.json
             .quantum_v14.json
-          key: tani-v14-1-fixed-checked-
-            tani-v14-quantum-aneh-aheng-${{ hashFiles('kerajaan_semut_emas_tani_v14_1_fixed_checked.py') }}
+          key: tani-v14-1-fixed-checked-${{ hashFiles('kerajaan_semut_emas_tani_v14_1_fixed_checked.py') }}
           restore-keys: |
             tani-v14-1-fixed-checked-
             tani-v14-quantum-aneh-aheng-
