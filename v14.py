@@ -424,12 +424,12 @@ def ratu_quantum_aneh_aheng():
         return
     # Anti zonk Hurst - random walk = skip
     if abs(val_hurst-0.5) < 0.05:
-            print(f"🚫 HURST RANDOM {val_hurst:.2f} - Anti zonk skip!")
-            # Save anyway
-            save_json(CONFIG["QUANTUM_FILE"], quantum_mem)
-            save_json(CONFIG["DNA_FILE"], dna)
-            save_json(CONFIG["MEMORY_FILE"], memory)
-            return
+        print(f"🚫 HURST RANDOM {val_hurst:.2f} - Anti zonk skip!")
+        save_json(CONFIG["QUANTUM_FILE"], quantum_mem)
+        save_json(CONFIG["DNA_FILE"], dna)
+        save_json(CONFIG["MEMORY_FILE"], memory)
+        save_json(CONFIG["LAST_FILE"], last)
+        return
     
     # Keputusan
     keputusan = None
