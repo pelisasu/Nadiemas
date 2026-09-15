@@ -1,0 +1,65 @@
+name: TANI V14.0 ANEH AHENG QUANTUM ENTANGLEMENT MURNI KARYA GUA 🔬👽💀☠️
+on:
+  schedule:
+    - cron: '0,30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: tani-v14-aneh-aheng-quantum
+  cancel-in-progress: false
+
+jobs:
+  tani-quantum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Init files quantum
+        run: |
+          touch .dna_tani_v12.json .memory_tani_v12.json .last_tani_v12.json .offset_history.json .quantum_v14.json || true
+          ls -lh .*.json || echo "init"
+
+      - name: Cache Quantum DNA
+        uses: actions/cache@v4
+        with:
+          path: |
+            .dna_tani_v12.json
+            .memory_tani_v12.json
+            .last_tani_v12.json
+            .offset_history.json
+            .quantum_v14.json
+          key: tani-v14-1-fixed-checked-
+            tani-v14-quantum-aneh-aheng-${{ hashFiles('kerajaan_semut_emas_tani_v14_1_fixed_checked.py') }}
+          restore-keys: |
+            tani-v14-1-fixed-checked-
+            tani-v14-quantum-aneh-aheng-
+            tani-v12-garang-perfect-
+
+      - name: Install dependencies quantum
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas yfinance pytz numpy --quiet --no-cache-dir
+
+      - name: Run TANI V14 ANEH AHENG QUANTUM
+        run: python kerajaan_semut_emas_tani_v14_1_fixed_checked.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Show Gudang Quantum Aneh Aheng
+        if: always()
+        run: |
+          echo "=== GUDANG V14 QUANTUM ANEH AHENG ==="
+          cat .memory_tani_v12.json || echo "init"
+          cat .quantum_v14.json || echo "no quantum"
+          ls -lh .*.json
+          echo "🔬👽 V14 ANEH AHENG QUANTUM MURNI KARYA GUA!"
